@@ -67,7 +67,13 @@ REASONS = [
     "BAD_ARC_INSTANCE",
     "INTERNAL",
 ]
-DEVIATIONS = ["BARE_PROPERTY", "PVALUE_TSPECIALS", "TRAILING_SEMICOLON", "LF_FOLDING"]
+DEVIATIONS = [
+    "BARE_PROPERTY",
+    "PVALUE_TSPECIALS",
+    "TRAILING_SEMICOLON",
+    "LF_FOLDING",
+    "MISSING_AUTHSERV_ID",
+]
 MESSAGE = re.compile(r"[a-z_]+( at position \d+)?")
 
 ENTRY_POINTS: list[Callable[..., object]] = [parse, parse_arc]
@@ -548,3 +554,17 @@ def test_accessors_fold_ascii_case_only() -> None:
 def test_ascii_lower_maps_only_a_to_z() -> None:
     assert ascii_lower("ABCXYZ abcxyz 0-9_.") == "abcxyz abcxyz 0-9_."
     assert ascii_lower("\u00c0\u212a\u0130\u017f") == "\u00c0\u212a\u0130\u017f"
+
+
+def test_authserv_id_may_be_none() -> None:
+    model = AuthenticationResults(
+        authserv_id=None,
+        version=1,
+        version_given=False,
+        none=False,
+        results=(DMARC,),
+        deviations=frozenset({Deviation.MISSING_AUTHSERV_ID}),
+    )
+    assert model.authserv_id is None
+    assert model.results_for("dmarc") == (DMARC,)
+    assert dataclasses.replace(model, authserv_id="mx.example") != model

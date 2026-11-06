@@ -58,9 +58,13 @@ class Result:
 
 @dataclass(frozen=True, slots=True)
 class AuthenticationResults:
-    """One parsed ``Authentication-Results`` value."""
+    """One parsed ``Authentication-Results`` value.
 
-    authserv_id: str
+    ``authserv_id`` is ``None`` only when the value has none (recorded as
+    ``Deviation.MISSING_AUTHSERV_ID``).
+    """
+
+    authserv_id: str | None
     version: int
     version_given: bool
     none: bool

@@ -48,6 +48,7 @@ class Deviation(enum.StrEnum):
     PVALUE_TSPECIALS = enum.auto()
     TRAILING_SEMICOLON = enum.auto()
     LF_FOLDING = enum.auto()
+    MISSING_AUTHSERV_ID = enum.auto()
 
 
 class AuthResultsError(ValueError):
