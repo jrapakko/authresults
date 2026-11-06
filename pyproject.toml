@@ -1,0 +1,99 @@
+[build-system]
+requires = ["flit_core>=4.2,<5"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "authresults"
+dynamic = ["version"]
+description = "Zero-dependency, fully typed parser for RFC 8601 Authentication-Results header field values."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Jess Rapakko" }]
+requires-python = ">=3.11"
+dependencies = []
+keywords = ["email", "authentication-results", "rfc8601", "dkim", "spf", "dmarc", "arc"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Communications :: Email",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Source = "https://github.com/jrapakko/authresults"
+Issues = "https://github.com/jrapakko/authresults/issues"
+Changelog = "https://github.com/jrapakko/authresults/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "check-wheel-contents",
+    "coverage",
+    "flit-core",
+    "hypothesis",
+    "mypy",
+    "pytest",
+    "pytest-timeout",
+    "ruff",
+    "twine",
+    "zizmor",
+]
+
+[tool.flit.sdist]
+include = ["CHANGELOG.md", "build-constraints.txt", "scripts/", "tests/", "uv.lock"]
+# flit packs from the filesystem, not from git: keep local clutter out.
+# (The wheel is guarded by the allowlist in tests/test_packaging.py.)
+exclude = ["**/.*", "**/__pycache__", "**/.hypothesis"]
+
+[tool.uv]
+# Only resolve distributions uploaded at least 7 days ago.
+exclude-newer = "7 days"
+# Do not build or install the project itself on `uv sync` / `uv run`: that
+# would fetch the build backend without hash checking. Tests and mypy import
+# the package from src/ instead; `uv build` (hash-checked) still works.
+package = false
+
+[tool.ruff]
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812", # conflicts with the formatter
+    "D203",   # incompatible with D211
+    "D213",   # incompatible with D212
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "S101"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+mypy_path = "src"
+files = ["src", "tests", "scripts"]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+testpaths = ["tests"]
+pythonpath = ["src"]
+timeout = 120
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+source = ["src", "scripts"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = false

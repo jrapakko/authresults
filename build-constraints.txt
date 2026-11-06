@@ -1,0 +1,5 @@
+# Build backend, pinned by hash. Used by `uv build --build-constraints`.
+# Keep in step with the flit-core version in uv.lock (tests/test_packaging.py checks it).
+flit-core==4.2.0 \
+    --hash=sha256:2bee22dc8ba89c2e35b4e1ad575e596aac945c85672dd8f3cad21b629036e044 \
+    --hash=sha256:84e4e4d8fdd45ba2613800a3ebc6834de26d47ec9746efc3719f94181137b460

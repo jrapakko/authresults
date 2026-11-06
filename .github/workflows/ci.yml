@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_LOCKED: "1"
+  UV_VERSION: "0.13.5"
+
+jobs:
+  test:
+    name: test (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ matrix.python-version }}
+          enable-cache: false
+      - run: uv sync
+      - run: uv run pytest
+
+  checks:
+    name: lint, types, coverage, build, zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.15"
+          enable-cache: false
+      - run: uv sync
+      - name: forbidden names
+        # Same check as the prek hooks, over tracked file contents and paths.
+        # grep: rc 0 = name found (fail), rc 1 = clean, anything else = error (fail).
+        run: |
+          pattern='p[e]nny[^[:alnum:]]*fork'
+          found=0
+          rc=0
+          git grep -I -n -i -E -e "$pattern" || rc=$?
+          case "$rc" in
+            0) echo "::error::forbidden name in tracked file contents"; found=1 ;;
+            1) ;;
+            *) echo "::error::git grep failed (rc=$rc)"; exit 2 ;;
+          esac
+          paths="$(git ls-files)"
+          rc=0
+          printf '%s\n' "$paths" | grep -i -E -e "$pattern" || rc=$?
+          case "$rc" in
+            0) echo "::error::forbidden name in tracked file paths"; found=1 ;;
+            1) ;;
+            *) echo "::error::path grep failed (rc=$rc)"; exit 2 ;;
+          esac
+          exit "$found"
+      - name: lock cooldown
+        run: uv run python scripts/check_lock_cooldown.py
+      - name: ruff
+        run: |
+          uv run ruff check --output-format=github
+          uv run ruff format --check
+      - name: mypy
+        run: uv run mypy
+      - name: coverage
+        run: |
+          uv run coverage run -m pytest
+          uv run coverage report
+      - name: build
+        run: uv build --build-constraints build-constraints.txt --require-hashes
+      - name: check distributions
+        run: |
+          uv run twine check --strict dist/*
+          uv run check-wheel-contents dist/*.whl
+          AUTHRESULTS_WHEEL="$(ls dist/*.whl)" AUTHRESULTS_SDIST="$(ls dist/*.tar.gz)" \
+            uv run pytest tests/test_packaging.py
+      - name: zizmor
+        # The token enables zizmor's online audits (read-only GitHub API calls).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run zizmor --format=github .github/workflows .github/dependabot.yml

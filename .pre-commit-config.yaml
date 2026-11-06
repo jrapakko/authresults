@@ -1,0 +1,52 @@
+# Hooks for prek (https://github.com/j178/prek). This config uses prek's
+# `repo: builtin` hooks, so upstream pre-commit cannot run it.
+#
+# Nothing here installs a package outside uv.lock: the hygiene hooks are
+# built into prek, and ruff and zizmor run through `uv run --locked` from the
+# hash-checked lock.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit, manual]
+
+repos:
+  - repo: builtin
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: trailing-whitespace
+      # The downstream application's name must not appear in this repository:
+      # not in file contents, not in commit messages. CI runs the same check.
+      - id: deny-pattern
+        name: forbidden names (contents, commit message)
+        args: [--ignore-case, 'p[e]nny[\W_]*fork']
+        stages: [pre-commit, commit-msg, manual]
+
+  - repo: local
+    hooks:
+      - id: forbidden-names-paths
+        name: forbidden names (paths)
+        language: fail
+        entry: path contains a forbidden name
+        files: '(?i)p[e]nny[\W_]*fork'
+      - id: ruff-check
+        name: ruff check
+        language: system
+        entry: uv run --locked ruff check --force-exclude
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        language: system
+        entry: uv run --locked ruff format --force-exclude
+        types_or: [python, pyi, markdown]
+      - id: zizmor
+        name: zizmor
+        language: system
+        entry: uv run --locked zizmor --no-progress
+        files: (^|/)(\.github/(workflows/[^/]+|dependabot)\.ya?ml|action\.ya?ml|\.pre-commit-(config|hooks)\.ya?ml)$
+        require_serial: true
