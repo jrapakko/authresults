@@ -10,6 +10,10 @@ from .cases_grammar import LyingStr, StrSubclass
 
 _DOMAIN_OF = "PLAN.md 2.5 domain_of; AU-Q33a"
 _ASCII_DOMAIN = "PLAN.md 2.5 ascii_domain; AU-Q33a"
+_Q58_CLARIFIED = (
+    "; AU-Q58 clarification (round 2 M1: the bracketed text must pass the "
+    "unbracketed address check, AU-Q24 and G10"
+)
 
 
 def _d(case_id: str, value: str, expected: str | None, note: str = "") -> Case:
@@ -44,6 +48,112 @@ CASES: tuple[Case, ...] = (
     _d("nothing after @", "a@", None, " (None only when empty)"),
     _d("lone @", "@", None),
     _d("empty", "", None),
+    # AU-Q58: one enclosing <local@domain> is stripped; any other value with
+    # : [ ] < or > gives None.
+    _d(
+        "au-q58 angle address",
+        "<noreply@mail.example.com>",
+        "mail.example.com",
+        "; AU-Q58 (exactly < local-part @ domain >: the domain)",
+    ),
+    _d(
+        "au-q58 angle address then @",
+        "<evil@evil.example>@good.example",
+        None,
+        "; AU-Q58 (not exactly one enclosing <...>: None)",
+    ),
+    _d(
+        "au-q58 unclosed <",
+        "<user@example.com",
+        None,
+        "; AU-Q58 (a < with no closing >: None)",
+    ),
+    _d(
+        "au-q58 ip literal",
+        "a@[192.0.2.1]",
+        None,
+        "; AU-Q58 (a domain with [ ]: None)",
+    ),
+    _d(
+        "au-q58 angle ip literal",
+        "<a@[192.0.2.1]>",
+        None,
+        "; AU-Q58 (stripped, the domain still holds [ ]: None)",
+    ),
+    _d("au-q58 null path", "<>", None, "; AU-Q58 (no local-part @ domain: None)"),
+    # AU-Q58 clarification (AL3c red-team round 2 M1): the text inside the
+    # brackets must be exactly what the parser's unbracketed address check
+    # accepts (AU-Q24, G10).
+    _d(
+        "au-q58 bracketed two @",
+        "<evil@evil.example@good.example>",
+        None,
+        _Q58_CLARIFIED + "; two @: None)",
+    ),
+    _d(
+        "au-q58 bracketed empty local-part before @@",
+        "<a@@good.example>",
+        None,
+        _Q58_CLARIFIED + "; a@@: None)",
+    ),
+    _d(
+        "au-q58 bracketed double dot",
+        "<a..b@good.example>",
+        None,
+        _Q58_CLARIFIED + "; a..b is not a dot-atom: None)",
+    ),
+    _d(
+        "au-q58 bracketed lone dot local-part",
+        "<.@good.example>",
+        None,
+        _Q58_CLARIFIED + "; . is not a dot-atom: None)",
+    ),
+    _d(
+        "au-q58 bracketed single-label domain",
+        "<a@b>",
+        None,
+        _Q58_CLARIFIED + "; one label: None)",
+    ),
+    _d(
+        "au-q58 bracketed address control",
+        "<user@mail.example.com>",
+        "mail.example.com",
+        _Q58_CLARIFIED + "; a valid address: its domain)",
+    ),
+    _d(
+        "au-q58 bracketed empty local-part",
+        "<@x.example>",
+        "x.example",
+        _Q58_CLARIFIED + "; the unbracketed path accepts @x.example, an "
+        "empty local-part, G10: its domain)",
+    ),
+    # AU-Q58 clarification: a quoted local-part is one the unbracketed path
+    # accepts (G10), so the bracketed address gives its domain.
+    _d(
+        "au-q58 bracketed quoted local-part",
+        '<"a"@example.com>',
+        "example.com",
+        _Q58_CLARIFIED + "; a quoted local-part, G10: its domain)",
+    ),
+    _d(
+        "au-q58 bracketed quoted local-part with space",
+        '<"a b"@example.com>',
+        "example.com",
+        _Q58_CLARIFIED + "; a quoted local-part with a space, G10: its domain)",
+    ),
+    _d(
+        "au-q58 bracketed quoted local-part with @",
+        '<"a@evil"@good.example>',
+        "good.example",
+        _Q58_CLARIFIED + "; the @ inside the quoted local-part is not the "
+        "address @: the domain after the closing quote)",
+    ),
+    _d(
+        "au-q58 bracketed quoted local-part single-label domain",
+        '<"a"@b>',
+        None,
+        _Q58_CLARIFIED + "; one label, refused unbracketed: None)",
+    ),
     Case(
         id="domain_of str subclass",
         call="domain_of",

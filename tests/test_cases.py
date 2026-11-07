@@ -14,6 +14,7 @@ from typing import cast
 
 import pytest
 
+import authresults
 from authresults import (
     AuthenticationResults,
     AuthResultsError,
@@ -30,6 +31,7 @@ from . import (
     cases_helpers,
     cases_limits,
     cases_redteam,
+    cases_refused,
     cases_rfc8601,
     cases_rfc8617,
     cases_spike,
@@ -37,6 +39,10 @@ from . import (
     cases_vendor,
 )
 from ._case import ANY_POSITION, Case, Pending, fingerprint
+
+# AU-Q52: read through getattr, so the table imports before KnownShape exists;
+# a missing attribute is a failure, never a pass.
+_NO_ATTRIBUTE = object()
 
 # The case table runs only under the guards in tests/conftest.py, which
 # imports this module while it loads (AL3a round 3, N1). Without them (for
@@ -57,6 +63,7 @@ ALL_CASES: tuple[Case, ...] = (
     *cases_helpers.CASES,
     *cases_to_value.CASES,
     *cases_redteam.CASES,
+    *cases_refused.CASES,
 )
 
 
@@ -105,7 +112,14 @@ def _check_error(case: Case, err: AuthResultsError) -> None:
     assert str(err) == message
     assert err.args == (message,)
     assert repr(err) == f"AuthResultsError({message!r})"
-    assert set(vars(err)) == {"reason", "position"}
+    # AU-Q52: known_shape is None unless the case names a KnownShape value.
+    shape = getattr(err, "known_shape", _NO_ATTRIBUTE)
+    if case.known_shape is None:
+        assert shape is None
+    else:
+        assert type(shape) is getattr(authresults, "KnownShape", _NO_ATTRIBUTE)
+        assert shape == case.known_shape
+    assert set(vars(err)) <= {"reason", "position", "known_shape"}
     assert not hasattr(err, "__notes__")
     # No cause rides along (the expected reason is never INTERNAL).
     assert err.__cause__ is None

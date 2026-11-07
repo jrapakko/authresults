@@ -380,7 +380,9 @@ CASES: tuple[Case, ...] = (
         value="mx.google.com",
         expected=ErrorReason.SYNTAX,
         position=13,
-        cite=_SPIKE + "24; G1 (SYNTAX at len(value))",
+        known_shape="authserv_id_only",
+        cite=_SPIKE + "24; G1 (SYNTAX at len(value)); AU-Q52 and AU-Q51 (an "
+        "authserv-id alone is the AUTHSERV_ID_ONLY shape)",
     ),
     Case(
         id="garbled",

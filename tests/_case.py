@@ -94,6 +94,9 @@ class Case:
     - ``position``: for an error, an ``int``, ``None`` or ``ANY_POSITION``.
     - ``deviation``: for a strict ``DEVIATION`` case, the deviation it tests.
     - ``lookup``: for ``get_unique``, the ``(ptype, name)`` asked of result 0.
+    - ``known_shape``: for an error, the expected ``KnownShape`` value as its
+      string (AU-Q52), or ``None`` (the default: the refusal matches no entry
+      in ``docs/refused-shapes.md``).
     - ``url``, ``read``, ``rewrite``: vendor provenance.
     - ``timeout``: seconds, for the timing cases.
     """
@@ -107,6 +110,7 @@ class Case:
     position: int | _AnyPosition | _Unset | None = UNSET
     deviation: Deviation | None = None
     lookup: tuple[str | None, str] | None = None
+    known_shape: str | None = None
     url: str | None = None
     read: str | None = None
     rewrite: str | None = None

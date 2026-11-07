@@ -13,6 +13,7 @@ from typing import cast
 
 import pytest
 
+import authresults
 from authresults import (
     ArcAuthenticationResults,
     AuthenticationResults,
@@ -23,7 +24,7 @@ from authresults import (
 )
 from authresults._errors import InternalCause
 
-from . import cases_rfc8601, cases_spike, cases_vendor
+from . import cases_refused, cases_rfc8601, cases_spike, cases_vendor
 from ._case import ANY_POSITION, UNSET, Case, ar, fingerprint, prop, res
 from .test_cases import ALL_CASES, is_stub_error
 
@@ -119,6 +120,20 @@ def test_deviation_field_only_on_deviation_cases() -> None:
             assert case.deviation is None, case.id
 
 
+def test_known_shape_only_on_refusals() -> None:
+    # AU-Q52: a tag only on a parse refusal, never on INTERNAL or INVALID_TYPE.
+    for case in ALL_CASES:
+        if case.known_shape is None:
+            continue
+        assert re.fullmatch(r"[a-z]+(?:_[a-z0-9]+)*", case.known_shape), case.id
+        assert isinstance(case.expected, ErrorReason), case.id
+        assert case.expected not in {
+            ErrorReason.INTERNAL,
+            ErrorReason.INVALID_TYPE,
+        }, case.id
+        assert case.call in {"parse", "parse_arc"}, case.id
+
+
 def test_spike_names_exact() -> None:
     ids = [c.id for c in cases_spike.CASES]
     assert sorted(ids) == sorted((*SPIKE_NAMES, "deep nesting (within cap)"))
@@ -204,7 +219,8 @@ _V6 = re.compile(r"[0-9A-Fa-f]*:[0-9A-Fa-f:]*:[0-9A-Fa-f]*")
 _LOCAL = re.compile(
     r"(?<![A-Za-z0-9.!#$%&'*+/?^_`{|}~-])([A-Za-z0-9.!#$%&'*+/?^_`{|}~-]*)@"
 )
-_PTYPES = frozenset({"header", "smtp", "body", "policy", "dns"})
+# "arc": the ptype of Exim's own arc.oldest-pass property (AL3c vendor case).
+_PTYPES = frozenset({"header", "smtp", "body", "policy", "dns", "arc"})
 _LOCAL_PARTS = frozenset({"", "sender", "bounces"})
 _QUOTED_LOCAL = re.compile(r'"((?:[^"\\]|\\.)*)"@')
 _QUOTED_LOCAL_PARTS: frozenset[str] = frozenset()  # none in the vendor shapes
@@ -327,7 +343,11 @@ def _vendor_problems(case: Case) -> list[str]:
     ]
 
 
-@pytest.mark.parametrize("case", cases_vendor.CASES, ids=lambda c: c.id)
+# AL3c: the refused-shapes pinning cases carry vendor provenance too.
+_PROVENANCE_CASES = (*cases_vendor.CASES, *cases_refused.CASES)
+
+
+@pytest.mark.parametrize("case", _PROVENANCE_CASES, ids=lambda c: c.id)
 def test_vendor_case(case: Case) -> None:
     assert case.url is not None
     assert case.url.startswith("https://")
@@ -382,11 +402,49 @@ def test_vendor_checker_flags() -> None:
 
 
 def test_only_vendor_cases_carry_provenance() -> None:
-    vendor_ids = {c.id for c in cases_vendor.CASES}
+    vendor_ids = {c.id for c in _PROVENANCE_CASES}
     for case in ALL_CASES:
         if case.id not in vendor_ids:
             assert case.url is None, case.id
             assert case.read is None, case.id
+
+
+# The refused-shapes log (AL3c, AU-Q52): one pinning case per KnownShape
+# member, each tagged; outside cases_refused only the AUTHSERV_ID_ONLY shape
+# is reached by older cases (AU-Q51).
+
+_DOC = Path(__file__).resolve().parent.parent / "docs" / "refused-shapes.md"
+
+
+def test_refused_cases_pin_every_known_shape() -> None:
+    known_shape = getattr(authresults, "KnownShape", None)
+    assert known_shape is not None, "authresults.KnownShape is missing"
+    members = {str(m) for m in known_shape}
+    refused = [c for c in cases_refused.CASES if isinstance(c.expected, ErrorReason)]
+    for case in refused:
+        assert case.id.startswith("refused "), case.id
+        # An untagged refusal here is a strict variant whose first refusal
+        # does not match the entry's rule (AU-Q54).
+        if case.known_shape is None:
+            assert case.kwargs.get("strict_syntax") is True, case.id
+    refused = [c for c in refused if c.known_shape is not None]
+    pinned = [c.known_shape for c in refused if c.known_shape is not None]
+    assert sorted(pinned) == sorted(members)
+    elsewhere = {
+        c.known_shape
+        for c in ALL_CASES
+        if c.known_shape is not None and c not in cases_refused.CASES
+    }
+    assert elsewhere <= members
+
+
+def test_refused_shapes_doc_names_every_case() -> None:
+    text = _DOC.read_text(encoding="utf-8")
+    for case in cases_refused.CASES:
+        assert f"`{case.id}`" in text, case.id
+        if case.known_shape is not None:
+            assert f"`{case.known_shape.upper()}`" in text, case.id
+            assert f'`"{case.known_shape}"`' in text, case.id
 
 
 # The comparison helpers themselves.

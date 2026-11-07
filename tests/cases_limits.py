@@ -88,9 +88,11 @@ def _length_cases(call: Call, n: int, *, default: bool) -> tuple[Case, Case]:
             kwargs=_options("max_length", n, default=default),
             expected=ErrorReason.SYNTAX,
             position=1 if call == "parse_arc" else n,
+            known_shape=None if call == "parse_arc" else "authserv_id_only",
             cite=_CITE + "the length check passes at N; then SYNTAX (parse_arc: i then "
             "end of input or x is SYNTAX at offset 1, G12; parse: an "
-            "authserv-id alone is SYNTAX at len(value), G1)",
+            "authserv-id alone is SYNTAX at len(value), G1, with the "
+            "AUTHSERV_ID_ONLY tag, AU-Q52 and AU-Q51)",
         )
         over = "i=1"[: n + 1] if call == "parse_arc" else "xyz"[: n + 1]
     return (

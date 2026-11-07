@@ -133,7 +133,9 @@ _REJECT: tuple[Case, ...] = (
         value="example.com",
         expected=_E.SYNTAX,
         position=11,
-        cite="G1 (1*resinfo: the authserv-id alone is SYNTAX at len(value))",
+        known_shape="authserv_id_only",
+        cite="G1 (1*resinfo: the authserv-id alone is SYNTAX at len(value)); "
+        "AU-Q52 and AU-Q51 (an authserv-id alone is the AUTHSERV_ID_ONLY shape)",
     ),
     Case(
         id="id then ;",
@@ -1187,9 +1189,486 @@ _TSPECIALS: tuple[Case, ...] = tuple(
         value=f"example.com; dkim=pass header.b=a{char}b",
         expected=_E.SYNTAX,
         position=33,
-        cite="G10 rule 4, AU-Q22 (< > , : [ ] \\ are SYNTAX in an unquoted pvalue)",
+        cite="G10 rule 4, AU-Q22 as amended by AU-Q45 (, and \\ stay SYNTAX in "
+        "an unquoted pvalue)",
     )
-    for char in "<>,:[]\\"
+    for char in ",\\"
+)
+
+# AU-Q45 (amends AU-Q22): < > : [ ] in an unquoted pvalue are accepted as
+# written under PVALUE_TSPECIALS; strict_syntax refuses them with DEVIATION at
+# the first such character (AU-Q16: DEVIATION at the first tspecial).
+_TSPECIALS_AU_Q45: tuple[Case, ...] = tuple(
+    case
+    for char in ":"
+    for case in (
+        Case(
+            id=f"tspecial {char} in pvalue",
+            value=f"example.com; dkim=pass header.b=a{char}b",
+            expected=ar(
+                "example.com",
+                res(
+                    "dkim",
+                    "pass",
+                    prop("header", "b", f"a{char}b", registered=True),
+                    registered=True,
+                ),
+                deviations=(Deviation.PVALUE_TSPECIALS,),
+            ),
+            cite="AU-Q45 (amends AU-Q22: < > : [ ] in an unquoted pvalue are "
+            "PVALUE_TSPECIALS, kept as written); G10 rule 3",
+        ),
+        Case(
+            id=f"tspecial {char} in pvalue strict",
+            value=f"example.com; dkim=pass header.b=a{char}b",
+            kwargs={"strict_syntax": True},
+            expected=_E.DEVIATION,
+            position=33,
+            deviation=Deviation.PVALUE_TSPECIALS,
+            cite=_STRICT + "; AU-Q45; AU-Q16 (DEVIATION at the first tspecial)",
+        ),
+    )
+)
+
+# AU-Q57 (amends AU-Q45 and AU-Q53): < > [ ] in one unquoted pvalue must pair
+# up; : is unrestricted.
+
+
+_MF_Q57 = "example.com; spf=pass smtp.mailfrom="
+_Q57_POSITIONS = (
+    "AU-Q57 positions clarification (scanned left to right; SYNTAX at the "
+    "first bracket at which the rule is broken)"
+)
+_Q57_ACCEPTED = (
+    "AU-Q57 (brackets pair up: accepted) and AU-Q53 (kept as written under "
+    "PVALUE_TSPECIALS)"
+)
+_Q57_REFUSED = (
+    "AU-Q57 (brackets must pair up: SYNTAX at the first bracket that breaks "
+    "the rule, at an unclosed opener for an opener)"
+)
+_Q57_REFUSED_STRICT = (
+    "AU-Q57 (SYNTAX in lenient and strict mode alike; the fault is at the "
+    "first tspecial, so no earlier deviation applies)"
+)
+# The three AL3c red-team M1 repros (an injected result inside an unclosed
+# bracket).
+_Q57_REPRO_DKIM = (
+    "mx.example; spf=fail smtp.mailfrom=<x; dkim=pass header.d=bank.example header.b=>"
+)
+_Q57_REPRO_ANGLE = (
+    "mx.example; dkim=fail header.from=<a@x.example; dmarc=pass "
+    "header.from=bank.example policy.y=>"
+)
+_Q57_REPRO_SQUARE = (
+    "mx.example; spf=fail smtp.helo=[x; dmarc=pass header.from=bank.example policy.x=]"
+)
+
+
+def _spf_mailfrom_tspecials(value: str) -> AuthenticationResults:
+    return ar(
+        "example.com",
+        res(
+            "spf",
+            "pass",
+            prop("smtp", "mailfrom", value, registered=True),
+            registered=True,
+        ),
+        deviations=(Deviation.PVALUE_TSPECIALS,),
+    )
+
+
+_AU_Q57_AMENDED: tuple[Case, ...] = tuple(
+    case
+    for char in "<>[]"
+    for case in (
+        Case(
+            id=f"tspecial {char} in pvalue",
+            value=f"example.com; dkim=pass header.b=a{char}b",
+            expected=_E.SYNTAX,
+            position=33,
+            cite="AU-Q57 (amends AU-Q45: a < or [ only first, a > or ] only "
+            "last as its closer; SYNTAX at the breaking bracket)",
+        ),
+        Case(
+            id=f"tspecial {char} in pvalue strict",
+            value=f"example.com; dkim=pass header.b=a{char}b",
+            kwargs={"strict_syntax": True},
+            expected=_E.SYNTAX,
+            position=33,
+            cite="AU-Q57 (SYNTAX in lenient and strict mode alike; the fault "
+            "is at the first tspecial)",
+        ),
+    )
+)
+
+_AU_Q57: tuple[Case, ...] = (
+    Case(
+        id="au-q57 null path <>",
+        value="example.com; spf=pass smtp.mailfrom=<>",
+        expected=_spf_mailfrom_tspecials("<>"),
+        cite=_Q57_ACCEPTED,
+    ),
+    Case(
+        id="au-q57 null path <> strict",
+        value="example.com; spf=pass smtp.mailfrom=<>",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=36,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57, AU-Q53; AU-Q16 (DEVIATION at the first tspecial)",
+    ),
+    Case(
+        id="au-q57 angle address",
+        value="example.com; spf=pass smtp.mailfrom=<user@example.com>",
+        expected=_spf_mailfrom_tspecials("<user@example.com>"),
+        cite=_Q57_ACCEPTED,
+    ),
+    Case(
+        id="au-q57 angle address strict",
+        value="example.com; spf=pass smtp.mailfrom=<user@example.com>",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=36,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57, AU-Q53; AU-Q16 (DEVIATION at the first tspecial)",
+    ),
+    Case(
+        id="au-q57 ip literal",
+        value="example.com; spf=pass smtp.mailfrom=[192.0.2.1]",
+        expected=_spf_mailfrom_tspecials("[192.0.2.1]"),
+        cite=_Q57_ACCEPTED,
+    ),
+    Case(
+        id="au-q57 ip literal strict",
+        value="example.com; spf=pass smtp.mailfrom=[192.0.2.1]",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=36,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57, AU-Q53; AU-Q16 (DEVIATION at the first tspecial)",
+    ),
+    Case(
+        id="au-q57 angle address with ip literal",
+        value="example.com; spf=pass smtp.mailfrom=<a@[192.0.2.1]>",
+        expected=_spf_mailfrom_tspecials("<a@[192.0.2.1]>"),
+        cite=_Q57_ACCEPTED,
+    ),
+    Case(
+        id="au-q57 angle address with ip literal strict",
+        value="example.com; spf=pass smtp.mailfrom=<a@[192.0.2.1]>",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=36,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57, AU-Q53; AU-Q16 (DEVIATION at the first tspecial)",
+    ),
+    Case(
+        id="au-q57 degenerate @[x]",
+        value="example.com; spf=pass smtp.mailfrom=@[x]",
+        expected=_spf_mailfrom_tspecials("@[x]"),
+        cite=_Q57_ACCEPTED,
+    ),
+    Case(
+        id="au-q57 degenerate @[x] strict",
+        value="example.com; spf=pass smtp.mailfrom=@[x]",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=37,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57, AU-Q53; AU-Q16 (DEVIATION at the first tspecial)",
+    ),
+    Case(
+        id="au-q57 degenerate a@@b:c",
+        value="example.com; spf=pass smtp.mailfrom=a@@b:c",
+        expected=_spf_mailfrom_tspecials("a@@b:c"),
+        cite=_Q57_ACCEPTED,
+    ),
+    Case(
+        id="au-q57 degenerate a@@b:c strict",
+        value="example.com; spf=pass smtp.mailfrom=a@@b:c",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=40,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57, AU-Q53; AU-Q16 (DEVIATION at the first tspecial)",
+    ),
+    Case(
+        id="au-q57 unclosed <",
+        value="example.com; spf=pass smtp.mailfrom=<x",
+        expected=_E.SYNTAX,
+        position=36,
+        cite=_Q57_REFUSED,
+    ),
+    Case(
+        id="au-q57 unclosed < strict",
+        value="example.com; spf=pass smtp.mailfrom=<x",
+        kwargs={"strict_syntax": True},
+        expected=_E.SYNTAX,
+        position=36,
+        cite=_Q57_REFUSED_STRICT,
+    ),
+    Case(
+        id="au-q57 stray >",
+        value="example.com; spf=pass smtp.mailfrom=x>",
+        expected=_E.SYNTAX,
+        position=37,
+        cite=_Q57_REFUSED,
+    ),
+    Case(
+        id="au-q57 stray > strict",
+        value="example.com; spf=pass smtp.mailfrom=x>",
+        kwargs={"strict_syntax": True},
+        expected=_E.SYNTAX,
+        position=37,
+        cite=_Q57_REFUSED_STRICT,
+    ),
+    Case(
+        id="au-q57 inner <",
+        value="example.com; spf=pass smtp.mailfrom=<<a>>",
+        expected=_E.SYNTAX,
+        position=37,
+        cite=_Q57_REFUSED,
+    ),
+    # Strict: the accepted leading < (a PVALUE_TSPECIALS deviation at 36)
+    # comes before the inner < (SYNTAX at 37); AU-Q57 defers to AU-Q16
+    # precedence (leftmost) where both apply.
+    Case(
+        id="au-q57 inner < strict",
+        value="example.com; spf=pass smtp.mailfrom=<<a>>",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=36,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57 (strict follows AU-Q16 precedence where both "
+        "apply); AU-Q16 (leftmost: the deviation at the leading <)",
+    ),
+    Case(
+        id="au-q57 degenerate <a@@b",
+        value="example.com; spf=pass smtp.mailfrom=<a@@b.example",
+        expected=_E.SYNTAX,
+        position=36,
+        cite=_Q57_REFUSED,
+    ),
+    Case(
+        id="au-q57 degenerate <a@@b strict",
+        value="example.com; spf=pass smtp.mailfrom=<a@@b.example",
+        kwargs={"strict_syntax": True},
+        expected=_E.SYNTAX,
+        position=36,
+        cite=_Q57_REFUSED_STRICT,
+    ),
+    Case(
+        id="au-q57 degenerate <a..b@",
+        value="example.com; spf=pass smtp.mailfrom=<a..b@good.example",
+        expected=_E.SYNTAX,
+        position=36,
+        cite=_Q57_REFUSED,
+    ),
+    Case(
+        id="au-q57 degenerate <a..b@ strict",
+        value="example.com; spf=pass smtp.mailfrom=<a..b@good.example",
+        kwargs={"strict_syntax": True},
+        expected=_E.SYNTAX,
+        position=36,
+        cite=_Q57_REFUSED_STRICT,
+    ),
+    Case(
+        id="au-q57 text after >",
+        value=_MF_Q57 + "<a>b",
+        expected=_E.SYNTAX,
+        position=38,
+        cite=_Q57_POSITIONS + " (the first > breaks the rule)",
+    ),
+    Case(
+        id="au-q57 text after > strict",
+        value=_MF_Q57 + "<a>b",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=36,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57 positions clarification and AU-Q16 (leftmost: "
+        "the PVALUE_TSPECIALS deviation at the leading < comes first)",
+    ),
+    Case(
+        id="au-q57 angle address then @",
+        value=_MF_Q57 + "<evil@evil.example>@good.example",
+        expected=_E.SYNTAX,
+        position=54,
+        cite=_Q57_POSITIONS + " (the first > breaks the rule)",
+    ),
+    Case(
+        id="au-q57 angle address then @ strict",
+        value=_MF_Q57 + "<evil@evil.example>@good.example",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=36,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57 positions clarification and AU-Q16 (leftmost: "
+        "the PVALUE_TSPECIALS deviation at the leading < comes first)",
+    ),
+    Case(
+        id="au-q57 two bracket pairs",
+        value=_MF_Q57 + "[a][b]",
+        expected=_E.SYNTAX,
+        position=38,
+        cite=_Q57_POSITIONS + " (the first ] breaks the rule)",
+    ),
+    Case(
+        id="au-q57 two bracket pairs strict",
+        value=_MF_Q57 + "[a][b]",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=36,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57 positions clarification and AU-Q16 (leftmost: "
+        "the PVALUE_TSPECIALS deviation at the leading [ comes first)",
+    ),
+    Case(
+        id="au-q57 closer after a colon",
+        value=_MF_Q57 + "a:b>",
+        expected=_E.SYNTAX,
+        position=39,
+        cite=_Q57_POSITIONS + " (the first > breaks the rule)",
+    ),
+    Case(
+        id="au-q57 closer after a colon strict",
+        value=_MF_Q57 + "a:b>",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=37,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q57 positions clarification and AU-Q16 (leftmost: "
+        "the PVALUE_TSPECIALS deviation at the : comes first)",
+    ),
+    # AU-Q58 clarification (round 2 M1): only domain_of refuses this run; the
+    # parser keeps it as written (balanced brackets, AU-Q53 and AU-Q57).
+    Case(
+        id="au-q57 bracketed two @ kept as written",
+        value=_MF_Q57 + "<evil@evil.example@good.example>",
+        expected=_spf_mailfrom_tspecials("<evil@evil.example@good.example>"),
+        cite=_Q57_ACCEPTED + "; AU-Q58 clarification (domain_of gives None, "
+        "the parser keeps the value)",
+    ),
+    Case(
+        id="au-q57 bracketed two @ kept as written strict",
+        value=_MF_Q57 + "<evil@evil.example@good.example>",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=36,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q53, AU-Q57; AU-Q16 (DEVIATION at the <)",
+    ),
+    Case(
+        id="au-q57 repro injected dkim",
+        value=_Q57_REPRO_DKIM,
+        expected=_E.SYNTAX,
+        position=35,
+        cite="AU-Q57 (red-team M1 repro: the unclosed opener is SYNTAX, so no "
+        "result is injected; lenient and strict alike)",
+    ),
+    Case(
+        id="au-q57 repro injected dkim strict",
+        value=_Q57_REPRO_DKIM,
+        kwargs={"strict_syntax": True},
+        expected=_E.SYNTAX,
+        position=35,
+        cite="AU-Q57 (red-team M1 repro: the unclosed opener is SYNTAX, so no "
+        "result is injected; lenient and strict alike)",
+    ),
+    Case(
+        id="au-q57 repro injected dmarc via <",
+        value=_Q57_REPRO_ANGLE,
+        expected=_E.SYNTAX,
+        position=34,
+        cite="AU-Q57 (red-team M1 repro: the unclosed opener is SYNTAX, so no "
+        "result is injected; lenient and strict alike)",
+    ),
+    Case(
+        id="au-q57 repro injected dmarc via < strict",
+        value=_Q57_REPRO_ANGLE,
+        kwargs={"strict_syntax": True},
+        expected=_E.SYNTAX,
+        position=34,
+        cite="AU-Q57 (red-team M1 repro: the unclosed opener is SYNTAX, so no "
+        "result is injected; lenient and strict alike)",
+    ),
+    Case(
+        id="au-q57 repro injected dmarc via [",
+        value=_Q57_REPRO_SQUARE,
+        expected=_E.SYNTAX,
+        position=31,
+        cite="AU-Q57 (red-team M1 repro: the unclosed opener is SYNTAX, so no "
+        "result is injected; lenient and strict alike)",
+    ),
+    Case(
+        id="au-q57 repro injected dmarc via [ strict",
+        value=_Q57_REPRO_SQUARE,
+        kwargs={"strict_syntax": True},
+        expected=_E.SYNTAX,
+        position=31,
+        cite="AU-Q57 (red-team M1 repro: the unclosed opener is SYNTAX, so no "
+        "result is injected; lenient and strict alike)",
+    ),
+)
+
+# AL3c fix round 1 (docs/refused-shapes.md detection rules): near misses that
+# keep their SYNTAX but carry no tag, and the edges of the AU-Q54 rule.
+_STRAY = (
+    "AU-Q48 and docs/refused-shapes.md (each label an RFC 5321 sub-domain, the "
+    "last with a letter; otherwise no STRAY_DOMAIN_BETWEEN_RESULTS tag)"
+)
+_SHAPE_EDGES: tuple[Case, ...] = (
+    Case(
+        id="stray domain near miss label starts with -",
+        value="mx.example; dkim=pass; example.-com; spf=pass",
+        expected=_E.SYNTAX,
+        position=30,
+        cite=_STRAY + "; SYNTAX at the . after the method keyword (G3)",
+    ),
+    Case(
+        id="stray domain near miss label ends with -",
+        value="mx.example; dkim=pass; example.com-",
+        expected=_E.SYNTAX,
+        position=30,
+        cite=_STRAY + "; SYNTAX at the . after the method keyword (G3)",
+    ),
+    Case(
+        id="stray domain near miss all-digit last label",
+        value="mx.example; dkim=pass; example.123",
+        expected=_E.SYNTAX,
+        position=30,
+        cite=_STRAY + "; SYNTAX at the . after the method keyword (G3)",
+    ),
+    Case(
+        id="au-q54 key with method version",
+        value="example.com; spf=pass; helo/1=a.b",
+        expected=_E.SYNTAX,
+        position=31,
+        known_shape="spf_details_as_results",
+        cite="AU-Q54 (the method token helo, read with its method version, is a "
+        "Received-SPF key; the refusal inside that resinfo is tagged); G4 "
+        "(CFWS is required after the result a: SYNTAX at the .)",
+    ),
+    Case(
+        id="au-q54 key followed by a dot",
+        value="example.com; spf=pass; client-ip.x=1",
+        expected=_E.SYNTAX,
+        position=32,
+        cite="AU-Q54 and docs/refused-shapes.md (the refusal comes at the . "
+        "before the key's =, so it is not inside a key=... resinfo: no tag); "
+        "G3",
+    ),
+    Case(
+        id="exim arc leading property comment after the dot",
+        call="parse_arc",
+        value="i=1; example.com; smtp.(c)remote-ip=192.0.2.1; arc=none",
+        expected=_E.SYNTAX,
+        position=22,
+        cite="AU-Q46 and docs/refused-shapes.md (deliberate: the token after "
+        "the . must follow it directly, no CFWS, so no "
+        "EXIM_ARC_LEADING_PROPERTY tag); G3",
+    ),
 )
 
 _DEVIATIONS: tuple[Case, ...] = (
@@ -1518,9 +1997,52 @@ _ADDRESS: tuple[Case, ...] = (
     Case(
         id="address literal",
         value=_MF + "a@[192.0.2.1]",
-        expected=_E.SYNTAX,
+        expected=ar(
+            "example.com",
+            res(
+                "spf",
+                "pass",
+                prop("smtp", "mailfrom", "a@[192.0.2.1]", registered=True),
+                registered=True,
+            ),
+            deviations=(Deviation.PVALUE_TSPECIALS,),
+        ),
+        cite="AU-Q53 (amends AU-Q24 and AU-Q45: a run with @ that also holds "
+        ": [ ] < or > leaves the address check and is kept as written under "
+        "PVALUE_TSPECIALS)",
+    ),
+    Case(
+        id="address literal strict",
+        value=_MF + "a@[192.0.2.1]",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
         position=38,
-        cite="AU-Q24 (no address-literal), G10 rule 4 (SYNTAX at the [)",
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q53 (DEVIATION at the first : [ ] < or >, the [)",
+    ),
+    Case(
+        id="address ipv6 literal",
+        value=_MF + "user@[IPv6:2001:db8::1]",
+        expected=ar(
+            "example.com",
+            res(
+                "spf",
+                "pass",
+                prop("smtp", "mailfrom", "user@[IPv6:2001:db8::1]", registered=True),
+                registered=True,
+            ),
+            deviations=(Deviation.PVALUE_TSPECIALS,),
+        ),
+        cite="AU-Q53 (an @ run with [ and : is kept as written under PVALUE_TSPECIALS)",
+    ),
+    Case(
+        id="address ipv6 literal strict",
+        value=_MF + "user@[IPv6:2001:db8::1]",
+        kwargs={"strict_syntax": True},
+        expected=_E.DEVIATION,
+        position=41,
+        deviation=Deviation.PVALUE_TSPECIALS,
+        cite=_STRICT + "; AU-Q53 (DEVIATION at the first : [ ] < or >, the [)",
     ),
     Case(
         id="address two @",
@@ -2447,8 +2969,10 @@ _MISSING_ID: tuple[Case, ...] = (
         value="none",
         expected=_E.SYNTAX,
         position=4,
+        known_shape="authserv_id_only",
         cite="AU-Q35 (none is not followed by = or /, so it is the authserv-id); "
-        "G1 (the authserv-id alone is SYNTAX at len(value))",
+        "G1 (the authserv-id alone is SYNTAX at len(value)); "
+        "AU-Q52 and AU-Q51 (an authserv-id alone is the AUTHSERV_ID_ONLY shape)",
     ),
     Case(
         id="arc missing authserv-id",
@@ -3060,8 +3584,10 @@ _AL3B: tuple[Case, ...] = (
         value="X",
         expected=_E.SYNTAX,
         position=1,
+        known_shape="authserv_id_only",
         cite="PLAN.md 3 reject list (the authserv-id alone is SYNTAX at "
-        "len(value)); EMPTY is only WSP or FWS (AU-Q16)",
+        "len(value)); EMPTY is only WSP or FWS (AU-Q16); "
+        "AU-Q52 and AU-Q51 (an authserv-id alone is the AUTHSERV_ID_ONLY shape)",
     ),
     Case(
         id="al3b bracket in unquoted id",
@@ -3070,6 +3596,54 @@ _AL3B: tuple[Case, ...] = (
         position=2,
         cite="AU-Q30 (tspecials in an unquoted authserv-id are SYNTAX); "
         "RFC 2045 5.1 tspecials",
+    ),
+)
+
+# AU-Q54: Received-SPF keys (RFC 7208 9.1) written as results after a ; are
+# refused by the existing branches and tagged SPF_DETAILS_AS_RESULTS when the
+# refusal falls inside such a resinfo; keys compare ASCII case-insensitively.
+_AU_Q54_CITE = (
+    "AU-Q54 (a Received-SPF key after a ; reads as a method; the refusal in "
+    "that resinfo is tagged SPF_DETAILS_AS_RESULTS); AU-Q52"
+)
+_AU_Q54: tuple[Case, ...] = (
+    Case(
+        id="au-q54 receiver key",
+        value="example.com; spf=pass; receiver=mx.example.com",
+        expected=_E.SYNTAX,
+        position=34,
+        known_shape="spf_details_as_results",
+        cite=_AU_Q54_CITE + "; G4 (CFWS is required after the result mx: SYNTAX "
+        "at the .)",
+    ),
+    Case(
+        id="au-q54 receiver key strict",
+        value="example.com; spf=pass; receiver=mx.example.com",
+        kwargs={"strict_syntax": True},
+        expected=_E.SYNTAX,
+        position=34,
+        known_shape="spf_details_as_results",
+        cite=_AU_Q54_CITE + "; no deviation comes first, so strict gives the same "
+        "tagged SYNTAX",
+    ),
+    Case(
+        id="au-q54 key compared case-insensitively",
+        value="example.com; spf=pass; HELO=mail.example.net",
+        expected=_E.SYNTAX,
+        position=32,
+        known_shape="spf_details_as_results",
+        cite=_AU_Q54_CITE + " (ASCII case-insensitive: HELO matches helo)",
+    ),
+    Case(
+        id="au-q54 identity key that parses",
+        value="example.com; spf=pass; identity=mailfrom",
+        expected=ar(
+            "example.com",
+            res("spf", "pass", registered=True),
+            res("identity", "mailfrom", registered=False),
+        ),
+        cite="AU-Q54 (detection runs only on the error path: identity=mailfrom "
+        "is a valid resinfo, kept with registered=False, G16)",
     ),
 )
 
@@ -3088,6 +3662,10 @@ CASES: tuple[Case, ...] = (
     *_CFWS,
     *_FOLDING,
     *_TSPECIALS,
+    *_TSPECIALS_AU_Q45,
+    *_AU_Q57_AMENDED,
+    *_AU_Q57,
+    *_SHAPE_EDGES,
     *_DEVIATIONS,
     *_ADDRESS,
     *_REGISTERED,
@@ -3097,4 +3675,5 @@ CASES: tuple[Case, ...] = (
     *_TYPES,
     *_AU_Q41,
     *_AL3B,
+    *_AU_Q54,
 )
