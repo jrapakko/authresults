@@ -4,7 +4,7 @@
 """Parser for RFC 8601 ``Authentication-Results`` header field values."""
 
 from ._api import parse, parse_arc
-from ._errors import AuthResultsError, Deviation, ErrorReason
+from ._errors import AuthResultsError, Deviation, ErrorReason, KnownShape
 from ._helpers import ascii_domain, domain_of
 from ._model import ArcAuthenticationResults, AuthenticationResults, Property, Result
 
@@ -16,6 +16,7 @@ __all__ = [
     "AuthenticationResults",
     "Deviation",
     "ErrorReason",
+    "KnownShape",
     "Property",
     "Result",
     "ascii_domain",

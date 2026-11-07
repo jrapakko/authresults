@@ -27,6 +27,10 @@ LET_DIG = frozenset(_ALPHA + _DIGITS)
 TOKEN = frozenset(_ALPHA + _DIGITS + "!#$%&'*+-.^_`{|}~")
 # The tspecials an unquoted pvalue may carry as PVALUE_TSPECIALS (AU-Q22).
 PVALUE_TSPECIALS = frozenset("/=?")
+# The tspecials outside atext an unquoted pvalue may also carry as
+# PVALUE_TSPECIALS (AU-Q45); with "@" they take the run out of the address
+# check (AU-Q53).
+PVALUE_WIDE_TSPECIALS = frozenset(":[]<>")
 # atext: the token characters minus "." plus "/ = ?" (G3).
 ATEXT = (TOKEN - {"."}) | PVALUE_TSPECIALS
 # Where an unquoted pvalue run ends (G10).
@@ -42,6 +46,17 @@ def is_keyword(word: str) -> bool:
         and word != ""
         and not word.endswith("-")
         and all(c in KEYWORD for c in word)
+    )
+
+
+def is_sub_domain(label: str) -> bool:
+    """``Let-dig [Ldh-str]``: ASCII LDH, not starting or ending with ``-``."""
+    return (
+        label.isascii()
+        and label != ""
+        and label[0] in LET_DIG
+        and label[-1] in LET_DIG
+        and all(c in KEYWORD for c in label)
     )
 
 
@@ -114,16 +129,26 @@ def address_fault(text: str) -> bool:
     The local-part is a dot-atom-text or a quoted-string (G10). Used by the
     serializer, which writes such a value bare (AU-Q17, AU-Q23).
     """
+    return address_at(text) < 0
+
+
+def address_at(text: str) -> int:
+    """Return the offset of the ``@`` that ends the local-part, or -1.
+
+    -1 unless *text* is exactly ``[local-part] "@" domain-name`` (see
+    ``address_fault``); for a quoted local-part this is the ``@`` after the
+    closing quote, not the first ``@``.
+    """
     end = len(text)
     if text.startswith('"'):
         at = _quoted_span(text)
         if at >= end or text[at] != "@":
-            return True
+            return _NOT_FOUND
     else:
         at = text.find("@")
         if at < 0 or dot_atom_fault(text, 0, at) >= 0:
-            return True
-    return domain_fault(text, at + 1, end) >= 0
+            return _NOT_FOUND
+    return _NOT_FOUND if domain_fault(text, at + 1, end) >= 0 else at
 
 
 def _quoted_span(text: str) -> int:

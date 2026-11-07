@@ -51,21 +51,44 @@ class Deviation(enum.StrEnum):
     MISSING_AUTHSERV_ID = enum.auto()
 
 
+class KnownShape(enum.StrEnum):
+    """A refused shape known from real software (``docs/refused-shapes.md``).
+
+    Closed: one member per entry; grows only by a release (AU-Q52).
+    """
+
+    EXIM_ARC_LEADING_PROPERTY = enum.auto()
+    STRAY_DOMAIN_BETWEEN_RESULTS = enum.auto()
+    AUTHSERV_ID_JOB_ID = enum.auto()
+    AUTHSERV_ID_ONLY = enum.auto()
+    SPF_DETAILS_AS_RESULTS = enum.auto()
+
+
 class AuthResultsError(ValueError):
     """The only exception the parser raises for any ``str`` input.
 
     The message is ``"<reason>"`` or ``"<reason> at position <n>"`` and never
-    contains input text.
+    contains input text. ``known_shape`` names the refused shape from
+    ``docs/refused-shapes.md`` the value matches, or is ``None`` (AU-Q52); it
+    is not part of the message.
     """
 
     reason: ErrorReason
     position: int | None
+    known_shape: KnownShape | None
 
-    def __init__(self, reason: ErrorReason, position: int | None = None) -> None:
-        """Create the error from a reason and an optional character offset.
+    def __init__(
+        self,
+        reason: ErrorReason,
+        position: int | None = None,
+        *,
+        known_shape: KnownShape | None = None,
+    ) -> None:
+        """Create the error from a reason, an optional offset and shape tag.
 
         A wrong argument type is a caller bug and raises ``TypeError``, whose
-        message does not repeat the argument.
+        message does not repeat the argument. A tag goes only with
+        ``SYNTAX``, the reason of every refusal in ``docs/refused-shapes.md``.
         """
         if type(reason) is not ErrorReason:
             msg = "reason must be an ErrorReason"
@@ -73,18 +96,32 @@ class AuthResultsError(ValueError):
         if position is not None and (type(position) is not int or position < 0):
             msg = "position must be an int of at least 0, or None"
             raise TypeError(msg)
+        if known_shape is not None and (
+            type(known_shape) is not KnownShape or reason is not ErrorReason.SYNTAX
+        ):
+            msg = "known_shape must be a KnownShape or None, and None for this reason"
+            raise TypeError(msg)
         message = (
             str(reason) if position is None else f"{reason} at position {position}"
         )
         super().__init__(message)
         self.reason = reason
         self.position = position
+        self.known_shape = known_shape
 
     def __reduce__(
         self,
-    ) -> tuple[type["AuthResultsError"], tuple[ErrorReason, int | None]]:
-        """Pickle by reason and position, not by message."""
-        return (type(self), (self.reason, self.position))
+    ) -> tuple[
+        type["AuthResultsError"],
+        tuple[ErrorReason, int | None],
+        dict[str, KnownShape | None],
+    ]:
+        """Pickle by reason, position and shape tag, not by message."""
+        return (
+            type(self),
+            (self.reason, self.position),
+            {"known_shape": self.known_shape},
+        )
 
 
 class InternalCause(Exception):  # noqa: N818 - a stand-in, not an error to catch

@@ -53,6 +53,10 @@ Known differences:
 11. Found at AL3b: authres refuses a leading zero in the authserv-id version
     (``mx.example 01; none`` raises ``UnsupportedVersionError``); we read it
     as version 1 (AU-Q24). Leading zeros in a method version agree.
+12. Found at AL3c: authres refuses ``:``, ``[``, ``]``, ``<`` and ``>`` in
+    an unquoted pvalue (``smtp.remote-ip=2001:db8::1``, ``smtp.mailfrom=<>``,
+    ``smtp.mailfrom=a@[192.0.2.1]``); we keep the value as written, flagged
+    ``PVALUE_TSPECIALS``, when its brackets pair up (AU-Q45, AU-Q53, AU-Q57).
 
 Normalised away or checked, each with its test:
 
@@ -71,7 +75,8 @@ Blind spot: where authres drops a property (1, 4, 6), our reading of it is
 not checked by this test; the case table and the properties cover it.
 
 The generated values avoid the shapes of 3, 8, 9 and 11 (``models(
-compatible=True)``, no leading zero in the authserv-id version) and put one
+compatible=True)``, no leading zero in the authserv-id version) and of 12
+(the canonical form quotes a value with these characters) and put one
 comment per CFWS spot (7), so authres accepts every generated value and the
 comparison runs.
 """
@@ -726,3 +731,24 @@ def test_difference_11_leading_zero_version_refused_by_authres() -> None:
     ours = parse(value)
     assert (ours.version, ours.version_given) == (1, True)
     assert _compare("mx.example; dkim/01=pass") == "compared"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "example.com; dkim=pass header.b=<a>",
+        "example.com; dkim=pass header.b=[a]",
+        "example.com; spf=pass smtp.remote-ip=2001:db8::1",
+        "example.com; spf=pass smtp.helo=[192.0.2.1]",
+        "example.com; spf=pass smtp.mailfrom=<>",
+        "example.com; spf=pass smtp.mailfrom=a@[192.0.2.1]",
+        "example.com; dmarc=pass header.from=<sender@mail.example.com>",
+    ],
+)
+def test_difference_12_wide_tspecials_refused_by_authres(value: str) -> None:
+    with pytest.raises(authres.core.AuthResError):
+        _theirs(value)
+    ours = parse(value)
+    written = value.rsplit("=", 1)[1]
+    assert [p.value for p in ours.results[0].properties] == [written]
+    assert ours.deviations == {Deviation.PVALUE_TSPECIALS}

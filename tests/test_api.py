@@ -44,6 +44,7 @@ PUBLIC_NAMES = {
     "ErrorReason",
     "Deviation",
     "AuthResultsError",
+    "KnownShape",
     "domain_of",
     "ascii_domain",
 }
