@@ -17,7 +17,7 @@ from authresults import (
     Property,
 )
 
-from ._case import Case, ar, bare, prop, res
+from ._case import Case, Options, ar, bare, prop, res
 
 _E = ErrorReason
 _STRICT = "PLAN.md 2.4 (strict_syntax: the first deviation raises DEVIATION)"
@@ -2780,25 +2780,26 @@ _SMALL_TRIGGERS: tuple[Case, ...] = (
         id="no-break space is not WSP",
         value="example.com;\u00a0none",
         kwargs={"ascii_only": False},
-        expected=_E.SYNTAX,
+        expected=_E.CONTROL_CHAR,
         position=12,
-        cite="RFC 5234 B.1 via G3 (WSP = SP / HTAB only), G14",
+        cite="RFC 5234 B.1 via G3 (WSP = SP / HTAB only), G14; AU-Q41 (Zs is "
+        "CONTROL_CHAR at its offset: the scan runs before the parse)",
     ),
     Case(
         id="ideographic space is not WSP",
         value="example.com; dkim=pass\u3000header.d=x",
         kwargs={"ascii_only": False},
-        expected=_E.SYNTAX,
+        expected=_E.CONTROL_CHAR,
         position=22,
-        cite="RFC 5234 B.1 via G3, G14",
+        cite="RFC 5234 B.1 via G3, G14; AU-Q41 (Zs is CONTROL_CHAR at its offset)",
     ),
     Case(
         id="line separator is not WSP",
         value="example.com; dkim=\u2028pass",
         kwargs={"ascii_only": False},
-        expected=_E.SYNTAX,
+        expected=_E.CONTROL_CHAR,
         position=18,
-        cite="RFC 5234 B.1 via G3, G14",
+        cite="RFC 5234 B.1 via G3, G14; AU-Q41 (Zl is CONTROL_CHAR at its offset)",
     ),
     Case(
         id="quoted-pair in reason resolved",
@@ -2858,6 +2859,152 @@ _SMALL_TRIGGERS: tuple[Case, ...] = (
     ),
 )
 
+# AU-Q41: Unicode space separators (Zs other than SP, Zl, Zp) and format
+# characters (Cf) are CONTROL_CHAR at their offset in every position, under
+# either ascii_only setting (checked before non-ASCII, as AU-Q37). The
+# characters are named by code point and category, from Unicode 17.0.0.
+_Q41 = "AU-Q41 (Zs other than SP, Zl, Zp and Cf are CONTROL_CHAR at the offset)"
+
+_Q41_CHARS: tuple[tuple[str, str], ...] = (
+    ("U+00A0", "\u00a0"),  # Zs NO-BREAK SPACE
+    ("U+2000", "\u2000"),  # Zs EN QUAD
+    ("U+3000", "\u3000"),  # Zs IDEOGRAPHIC SPACE
+    ("U+2028", "\u2028"),  # Zl LINE SEPARATOR
+    ("U+2029", "\u2029"),  # Zp PARAGRAPH SEPARATOR
+    ("U+202E", "\u202e"),  # Cf RIGHT-TO-LEFT OVERRIDE
+    ("U+200B", "\u200b"),  # Cf ZERO WIDTH SPACE
+    ("U+200D", "\u200d"),  # Cf ZERO WIDTH JOINER
+    ("U+FEFF", "\ufeff"),  # Cf ZERO WIDTH NO-BREAK SPACE (BOM)
+    ("U+00AD", "\u00ad"),  # Cf SOFT HYPHEN
+    ("U+2066", "\u2066"),  # Cf LEFT-TO-RIGHT ISOLATE
+)
+
+# (position name, text before the character, text after it, offset). The
+# offset is the length of the text before, written out.
+_Q41_SPOTS: tuple[tuple[str, str, str, int], ...] = (
+    ("authserv-id", "exa", "mple.com; none", 3),
+    ("unquoted value", "example.com; dkim=pass header.s=a", "b", 33),
+    ("domain after @", _MF + "a@b", "c.example", 39),
+    ("comment", "example.com; none (a", "b)", 20),
+    ("quoted-string", 'example.com; dkim=fail reason="a', 'b"', 32),
+    ("keyword", "example.com; dk", "im=pass", 15),
+)
+
+_AU_Q41_MATRIX: tuple[Case, ...] = tuple(
+    Case(
+        id=f"au-q41 {code} in {spot}{suffix}",
+        value=before + char + after,
+        kwargs=kwargs,
+        expected=_E.CONTROL_CHAR,
+        position=offset,
+        cite=_Q41 + note,
+    )
+    for code, char in _Q41_CHARS
+    for spot, before, after, offset in _Q41_SPOTS
+    for suffix, kwargs, note in (
+        ("", Options(ascii_only=False), ", even with ascii_only=False"),
+        (" ascii_only", Options(), ", before NON_ASCII (as AU-Q37)"),
+    )
+)
+
+_AU_Q41: tuple[Case, ...] = (
+    *_AU_Q41_MATRIX,
+    Case(
+        id="au-q41 bom at start",
+        value="\ufeffexample.com; none",
+        kwargs={"ascii_only": False},
+        expected=_E.CONTROL_CHAR,
+        position=0,
+        cite=_Q41 + " (a leading BOM is not stripped)",
+    ),
+    Case(
+        id="au-q41 c0 control before format char",
+        value="example.com; none (a\x00b\u200b)",
+        kwargs={"ascii_only": False},
+        expected=_E.CONTROL_CHAR,
+        position=20,
+        cite=_Q41 + "; AU-Q16 (character scan, leftmost wins)",
+    ),
+    Case(
+        id="au-q41 format char before c0 control",
+        value="example.com; none (a\u200bb\x00)",
+        kwargs={"ascii_only": False},
+        expected=_E.CONTROL_CHAR,
+        position=20,
+        cite=_Q41 + "; AU-Q16 (character scan, leftmost wins)",
+    ),
+    Case(
+        id="au-q41 nbsp before c0 control",
+        value="example.com; none (ab\u00a0\x00)",
+        expected=_E.CONTROL_CHAR,
+        position=21,
+        cite=_Q41 + "; AU-Q16 (character scan, leftmost wins)",
+    ),
+    Case(
+        id="au-q41 c0 control before nbsp",
+        value="example.com; none (ab\x00\u00a0)",
+        expected=_E.CONTROL_CHAR,
+        position=21,
+        cite=_Q41 + "; AU-Q16 (character scan, leftmost wins)",
+    ),
+    Case(
+        id="au-q41 non-ascii before format char ascii_only",
+        value="example.com; none (\u00fc\u200b)",
+        expected=_E.NON_ASCII,
+        position=19,
+        cite=_Q41 + "; AU-Q16 and AU-Q37 (leftmost wins; the per-character "
+        "check order only matters within one character)",
+    ),
+    Case(
+        id="au-q41 format char before non-ascii ascii_only",
+        value="example.com; none (\u200b\u00fc)",
+        expected=_E.CONTROL_CHAR,
+        position=19,
+        cite=_Q41 + "; AU-Q16 (character scan, leftmost wins)",
+    ),
+    Case(
+        id="au-q41 non-ascii then format char",
+        value="example.com; none (\u00fc\u200b)",
+        kwargs={"ascii_only": False},
+        expected=_E.CONTROL_CHAR,
+        position=20,
+        cite=_Q41 + "; G14 (the u-umlaut is allowed in a comment)",
+    ),
+    Case(
+        id="au-q41 format char before syntax",
+        value="example.com;; (\u200b)",
+        kwargs={"ascii_only": False},
+        expected=_E.CONTROL_CHAR,
+        position=15,
+        cite=_Q41 + "; AU-Q16 (the scan runs before the parse)",
+    ),
+    Case(
+        id="au-q41 format char before unterminated comment",
+        value="example.com; none (\u202e",
+        kwargs={"ascii_only": False},
+        expected=_E.CONTROL_CHAR,
+        position=19,
+        cite=_Q41 + "; AU-Q16 (the scan runs before the tokeniser pass)",
+    ),
+    Case(
+        id="au-q41 non-ascii letters still accepted",
+        value="b\u00fccher.example; dkim=fail reason=caf\u00e9 "
+        "header.d=\u4f8b\u5b50.example",
+        kwargs={"ascii_only": False},
+        expected=ar(
+            "b\u00fccher.example",
+            res(
+                "dkim",
+                "fail",
+                prop("header", "d", "\u4f8b\u5b50.example", registered=True),
+                reason="caf\u00e9",
+                registered=True,
+            ),
+        ),
+        cite=_Q41 + " (letters are not Zs, Zl, Zp or Cf); G14, AU-Q18a",
+    ),
+)
+
 CASES: tuple[Case, ...] = (
     *_COMMENT_SEMICOLONS,
     *_PREFIX_NAMES,
@@ -2880,4 +3027,5 @@ CASES: tuple[Case, ...] = (
     *_PRECEDENCE,
     *_GET_UNIQUE,
     *_TYPES,
+    *_AU_Q41,
 )

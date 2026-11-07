@@ -205,6 +205,69 @@ _IDS: tuple[Case, ...] = (
     _id("authserv-id token bare", "mx.example", "mx.example"),
 )
 
+_Q41 = (
+    "AU-Q41 (to_value refuses Zs other than SP, Zl, Zp and Cf in any written "
+    "field: CONTROL_CHAR, position=None"
+)
+
+
+def _q41(field_name: str, model: AuthenticationResults) -> tuple[Case, ...]:
+    """The same model under both ascii_only settings."""
+    return (
+        _bad(
+            f"au-q41 {field_name} non-ascii mode",
+            model,
+            ErrorReason.CONTROL_CHAR,
+            _Q41 + ", even with ascii_only=False)",
+            ascii_only=False,
+        ),
+        _bad(
+            f"au-q41 {field_name} ascii_only",
+            model,
+            ErrorReason.CONTROL_CHAR,
+            _Q41 + ", before NON_ASCII as AU-Q37)",
+        ),
+    )
+
+
+_AU_Q41: tuple[Case, ...] = (
+    *_q41("zero width space in authserv-id", ar("exa\u200bmple.com", none=True)),
+    *_q41(
+        "no-break space in reason",
+        _one(res("dkim", "fail", reason="a\u00a0b", registered=True)),
+    ),
+    *_q41(
+        "bidi override in property value",
+        _one(
+            res(
+                "dkim",
+                "pass",
+                prop("header", "s", "a\u202eb", registered=True),
+                registered=True,
+            )
+        ),
+    ),
+    Case(
+        id="to_value au-q41 non-ascii letters still written",
+        call="to_value",
+        value=ar(
+            "b\u00fccher.example",
+            res(
+                "dkim",
+                "fail",
+                prop("header", "d", "\u4f8b\u5b50.example", registered=True),
+                reason="caf\u00e9",
+                registered=True,
+            ),
+        ),
+        kwargs={"ascii_only": False},
+        expected="b\u00fccher.example; dkim=fail reason=caf\u00e9 "
+        "header.d=\u4f8b\u5b50.example",
+        cite=_Q17 + "; AU-Q41 (letters are not Zs, Zl, Zp or Cf); AL3a-R "
+        "refinement 1 (the token class includes UTF-8 under ascii_only=False)",
+    ),
+)
+
 CASES: tuple[Case, ...] = (
     *_AT_VALUES,
     _ok(
@@ -676,4 +739,5 @@ CASES: tuple[Case, ...] = (
         ErrorReason.SYNTAX,
         _Q33 + " (ptype=None with a name that is not a keyword)",
     ),
+    *_AU_Q41,
 )
