@@ -33,6 +33,42 @@ prek run --all-files
 CI runs the tests on Python 3.11 to 3.15 and all other checks once. CI does
 not run prek; it runs ruff, zizmor and the forbidden-name check directly.
 
+The Hypothesis properties run the `ci` profile (about 2,000 examples each)
+by default. For a long run, pick the `nightly` profile (100,000 examples
+each; `.github/workflows/fuzz.yml` runs it on a schedule):
+
+```sh
+HYPOTHESIS_PROFILE=nightly uv run pytest tests/test_properties.py tests/test_differential.py
+```
+
+## Mutation testing
+
+`mutmut` mutates the tokeniser and the parser (`[tool.mutmut]` in
+`pyproject.toml`). It is a heavy job: run it alone, by hand, not on every
+push.
+
+mutmut sits in its own `mutation` dependency group, which `uv sync` and CI
+never install. Its tree has compiled packages (PyYAML, libcst, setproctitle)
+whose locked wheels do not cover every Python version, and building one from
+source would fetch unlocked, unhashed build tools. So run it on Python 3.14,
+where every one of them has a locked wheel, in its own environment outside
+the repository (the main `.venv` is left alone). The `--no-build-package`
+flags make the sync fail instead of building if a wheel is ever missing.
+
+Some mutants loop and allocate without bound, so cap each process's memory
+(here 2.5 GB) in a subshell. Survivors that cannot be killed are listed with
+a reason in `mutmut-equivalent.md`; any other survivor is a test gap.
+
+```sh
+export UV_PROJECT_ENVIRONMENT="${XDG_CACHE_HOME:-$HOME/.cache}/authresults/venv-mutation"
+uv sync --locked --python 3.14 --group mutation \
+  --no-build-package pyyaml --no-build-package libcst --no-build-package setproctitle
+(ulimit -v 2500000 && HYPOTHESIS_PROFILE=mutmut uv run --no-sync mutmut run --max-children 2)
+uv run --no-sync mutmut results
+rm -rf mutants/
+unset UV_PROJECT_ENVIRONMENT
+```
+
 ## Rules
 
 - No runtime dependencies. The wheel must stay pure Python (`py3-none-any`).

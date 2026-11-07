@@ -34,6 +34,7 @@ Changelog = "https://github.com/jrapakko/authresults/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
+    "authres==1.2.0",
     "check-wheel-contents",
     "coverage",
     "flit-core",
@@ -42,8 +43,12 @@ dev = [
     "pytest",
     "pytest-timeout",
     "ruff",
+    "setuptools",
     "twine",
     "zizmor",
+]
+mutation = [
+    "mutmut",
 ]
 
 [tool.flit.sdist]
@@ -59,6 +64,30 @@ exclude-newer = "7 days"
 # would fetch the build backend without hash checking. Tests and mypy import
 # the package from src/ instead; `uv build` (hash-checked) still works.
 package = false
+# authres (the differential oracle, dev only) is sdist-only: build it with the
+# locked setuptools from the dev group, not with an unhashed backend fetched
+# into an isolated build environment.
+no-build-isolation-package = ["authres"]
+
+# authres's static metadata (from its PKG-INFO), so locking need not build it.
+[[tool.uv.dependency-metadata]]
+name = "authres"
+version = "1.2.0"
+requires-dist = []
+
+[tool.mutmut]
+# PLAN.md 4: the tokeniser and the parser. Run by hand (CONTRIBUTING).
+source_paths = ["src"]
+only_mutate = ["src/authresults/_tokenizer.py", "src/authresults/_parser.py"]
+# The behavioural tests only: test_invariants and test_case_table_meta read
+# the source files, which mutmut rewrites; packaging and the lock check do
+# not exercise the parser.
+pytest_add_cli_args_test_selection = [
+    "tests/test_cases.py",
+    "tests/test_api.py",
+    "tests/test_properties.py",
+    "tests/test_parser_units.py",
+]
 
 [tool.ruff]
 target-version = "py311"

@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# mutmut (PLAN.md 6.3)
+mutants/

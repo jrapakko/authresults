@@ -3005,6 +3005,74 @@ _AU_Q41: tuple[Case, ...] = (
     ),
 )
 
+# AL3b mutation audit: boundaries no case pinned (survivors of mutmut on
+# _tokenizer.py and _parser.py); each expectation follows the cited rule.
+_AL3B_ASCII_FALSE = Options(ascii_only=False)
+_AL3B: tuple[Case, ...] = (
+    Case(
+        id="al3b c1 u+009f last of the range",
+        value='mx.example; dkim=pass reason="a\x9f"',
+        kwargs=_AL3B_ASCII_FALSE,
+        expected=_E.CONTROL_CHAR,
+        position=31,
+        cite="G5 (C1 controls U+0080 to U+009F are CONTROL_CHAR); AU-Q37",
+    ),
+    Case(
+        id="al3b lone surrogate u+d800",
+        value='mx.example; dkim=pass reason="a\ud800"',
+        kwargs=_AL3B_ASCII_FALSE,
+        expected=_E.CONTROL_CHAR,
+        position=31,
+        cite="G5 (lone surrogates are CONTROL_CHAR); AU-Q29, AU-Q37",
+    ),
+    Case(
+        id="al3b lone surrogate u+dfff",
+        value='mx.example; dkim=pass reason="a\udfff"',
+        kwargs=_AL3B_ASCII_FALSE,
+        expected=_E.CONTROL_CHAR,
+        position=31,
+        cite="G5 (lone surrogates are CONTROL_CHAR); AU-Q29, AU-Q37",
+    ),
+    Case(
+        id="al3b bare lf at offset 0 with a final cr",
+        value="\nmx.example; none\r",
+        expected=_E.CONTROL_CHAR,
+        position=0,
+        cite="AU-Q38(1) (a bare LF not followed by WSP, at the LF); AU-Q16 "
+        "(the scan reports the leftmost fault)",
+    ),
+    Case(
+        id="al3b control after a fold",
+        value='mx.example;\r\n dkim=pass reason="a\x00"',
+        expected=_E.CONTROL_CHAR,
+        position=33,
+        cite="PLAN.md 2.1 (the character scan covers the whole value); G5",
+    ),
+    Case(
+        id="al3b non-ascii after a fold",
+        value='mx.example;\r\n dkim=pass reason="\u00e9"',
+        expected=_E.NON_ASCII,
+        position=32,
+        cite="PLAN.md 2.1 (the character scan covers the whole value); G14",
+    ),
+    Case(
+        id="al3b one-letter id alone",
+        value="X",
+        expected=_E.SYNTAX,
+        position=1,
+        cite="PLAN.md 3 reject list (the authserv-id alone is SYNTAX at "
+        "len(value)); EMPTY is only WSP or FWS (AU-Q16)",
+    ),
+    Case(
+        id="al3b bracket in unquoted id",
+        value="mx[1].example; none",
+        expected=_E.SYNTAX,
+        position=2,
+        cite="AU-Q30 (tspecials in an unquoted authserv-id are SYNTAX); "
+        "RFC 2045 5.1 tspecials",
+    ),
+)
+
 CASES: tuple[Case, ...] = (
     *_COMMENT_SEMICOLONS,
     *_PREFIX_NAMES,
@@ -3028,4 +3096,5 @@ CASES: tuple[Case, ...] = (
     *_GET_UNIQUE,
     *_TYPES,
     *_AU_Q41,
+    *_AL3B,
 )
