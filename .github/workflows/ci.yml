@@ -38,6 +38,16 @@ jobs:
           enable-cache: false
       - run: uv sync
       - run: uv run pytest
+      - name: case table, clean environment
+        # The frozen case-table files alone, with nothing inherited: an empty
+        # environment, no plugin autoload, an isolated interpreter (-I), fixed
+        # addopts and no conftest outside tests/. The venv's python is called
+        # directly, because uv run would bring the environment back.
+        run: >-
+          env -i PATH="$PATH" PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+          "$PWD/.venv/bin/python" -I -m pytest -p timeout -p no:cacheprovider
+          --confcutdir=tests -o addopts="--strict-markers --strict-config"
+          tests/test_cases.py tests/test_case_table_meta.py
 
   checks:
     name: lint, types, coverage, build, zizmor
