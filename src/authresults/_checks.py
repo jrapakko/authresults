@@ -36,6 +36,21 @@ def ascii_lower(text: str) -> str:
     return text.translate(_ASCII_LOWER)
 
 
+def exact_text(value: object) -> str:
+    """Return *value* as an exact ``str``, or raise ``INVALID_TYPE``.
+
+    A ``str`` subclass is copied from its underlying text by the base
+    ``str.__str__``, so its own ``__str__``, ``__len__``, indexing or
+    iteration overrides are never called (AU-Q38(3)).
+    """
+    if type(value) is str:
+        return value
+    # issubclass on the real type: isinstance alone trusts a __class__ lie.
+    if not (isinstance(value, str) and issubclass(type(value), str)):
+        raise AuthResultsError(ErrorReason.INVALID_TYPE)
+    return str.__str__(value)
+
+
 def keyword_arg(text: str) -> str:
     """Return the ASCII-lowercased lookup argument, or raise ``INVALID_TYPE``."""
     if type(text) is not str:

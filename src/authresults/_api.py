@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from ._checks import check_flag, check_limit
 from ._errors import call_guarded
 from ._model import ArcAuthenticationResults, AuthenticationResults
+from ._parser import parse_arc_value, parse_value
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,8 +108,8 @@ def parse_arc(  # noqa: PLR0913 - same keywords as parse(), spelled out
 
 
 def _parse_payload(value: str, options: _Options) -> AuthenticationResults:
-    raise NotImplementedError
+    return parse_value(value, options)
 
 
 def _parse_arc_value(value: str, options: _Options) -> ArcAuthenticationResults:
-    raise NotImplementedError
+    return parse_arc_value(value, options)

@@ -91,7 +91,7 @@ class InternalCause(Exception):  # noqa: N818 - a stand-in, not an error to catc
     """Private stand-in set as ``__cause__`` of an ``INTERNAL`` error.
 
     It carries only the original exception's type name (``type_name``, the
-    ``__qualname__``, e.g. ``"NotImplementedError"``) and its traceback, never
+    ``__qualname__``, e.g. ``"RuntimeError"``) and its traceback, never
     its message or arguments, so no input text reaches a logged traceback.
     Not public API; tests may rely on ``type_name``.
     """

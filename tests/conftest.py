@@ -31,12 +31,6 @@ import pytest
 from ._case import PENDING_KEY, Pending
 from .test_cases import ALL_CASES
 
-# --- AL2b: delete from here to the end marker and the blank line after it ---
-# isort: split
-from ._pending import pytest_collection_modifyitems  # noqa: F401 - a hook
-
-# --- end of the AL2b deletion ------------------------------------------------
-
 _TESTS = Path(__file__).resolve().parent
 _TABLE = _TESTS / "test_cases.py"
 _FUNCTION = "test_case"
