@@ -129,3 +129,18 @@ def property_registered(method: str, ptype: str, name: str) -> bool:
     if method in _ANY_HEADER and ptype == "header":
         return True
     return (ptype, name) in _PROPERTIES.get(method, _NO_PROPERTIES)
+
+
+def _all_names() -> frozenset[str]:
+    names = set(_RESULTS) | set(_PROPERTIES)
+    for codes in _RESULTS.values():
+        names.update(codes)
+    for pairs in _PROPERTIES.values():
+        for ptype, name in pairs:
+            names.update((ptype, name))
+    return frozenset(names)
+
+
+# Every method, result, ptype and property name in the snapshot; the
+# redaction helper keeps these words in values (AL3d, AU-Q65).
+REGISTERED_NAMES = _all_names()

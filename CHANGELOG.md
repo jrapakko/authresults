@@ -11,3 +11,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Project skeleton: packaging, CI, linting, type checking and security tooling.
   No parser yet.
+- `python -m authresults.redact`: a best-effort helper that replaces personal
+  data in one header value before it is posted in a bug report.
