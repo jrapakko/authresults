@@ -34,9 +34,11 @@ from ._redact_strategies import (
     Source,
     case_sources,
     check_spans,
+    doc_ipv6_runs,
     edited,
     header_text,
     inside,
+    ipv6_value,
     model_values,
     oracle_problems,
     outcome,
@@ -92,6 +94,14 @@ def test_p2_no_leak(value: str) -> None:
     assert code == 0
     assert out == result.text.encode("ascii") + b"\n"
     assert b"qx" not in err.lower()
+    # Section 19: no IPv6 placeholder equals a kept doc IPv6 by value.
+    placeholders = {
+        r.placeholder for r in result.replacements if r.kind is _redact.Kind.IPV6
+    }
+    kept = {
+        ipv6_value(run) for run in doc_ipv6_runs(result.text) if run not in placeholders
+    }
+    assert not kept & {ipv6_value(p) for p in placeholders}
     # P5 on the same values (section 17 item 8).
     second = _redact.redact(result.text)
     assert second.complete

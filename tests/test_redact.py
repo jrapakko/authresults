@@ -1137,6 +1137,34 @@ ROUND2: Final = {
             non_ascii=2,
         ),
     ),
+    **{
+        f"19 kept doc ipv6 {spelling} reserved by value": (
+            f"mx.qx.test; spf=pass smtp.remote-ip={spelling} x=fd00::7",
+            Want(
+                f"a.example; spf=pass smtp.remote-ip={spelling} tok1=2001:db8::2",
+                (_a(), rep("tok1", "word"), rep("2001:db8::2", "ipv6")),
+            ),
+        )
+        for spelling in (
+            "2001:0db8:0:0:0:0:0:1",
+            "2001:db8:0::1",
+            "2001:0db8:0000:0000:0000:0000:0000:0001",
+        )
+    },
+    "19 uppercase kept doc ipv6 skipped by the second placeholder": (
+        "mx.qx.test; spf=pass smtp.remote-ip=2001:DB8::2 x=fd00::7 y=fd00::8",
+        Want(
+            "a.example; spf=pass smtp.remote-ip=2001:DB8::2"
+            " tok1=2001:db8::1 tok2=2001:db8::3",
+            (
+                _a(),
+                rep("tok1", "word"),
+                rep("2001:db8::1", "ipv6"),
+                rep("tok2", "word"),
+                rep("2001:db8::3", "ipv6"),
+            ),
+        ),
+    ),
     "17.6 word keys ignore case": (
         "mx.qx.test; Qxbob=pass x=qxbob x=Qxbob x=QXBOB",
         Want(

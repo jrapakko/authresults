@@ -234,7 +234,7 @@ New test files: no imports from `test_cases` / `_case` internals, no attribute s
 
 Still leaks, by design or as residue (document all):
 - The authserv-id version (R6) and method-version digits are kept verbatim at any length (added in fix round 1, V4).
-- A kept doc IPv6 written non-canonically (`2001:0db8:0:0:0:0:0:1`) is not reserved under its canonical spelling, so a placeholder can be the same address spelled differently (`2001:db8::1`), which a reader could misread as equal values (final red-team L-c; no data revealed; open after the 3-round cap).
+- A kept doc IPv6 written non-canonically (`2001:0db8:0:0:0:0:0:1`) is not reserved under its canonical spelling, so a placeholder can be the same address spelled differently (`2001:db8::1`), which a reader could misread as equal values (final red-team L-c; fixed in section 19).
 - Any well-formed address in 2001:db8::/32 is kept (R10), so up to 96 bits after the prefix pass through when the input already uses the doc prefix.
 - Word placeholders ignore ASCII case only; `QxÄb` and `qxäb` get different `tok_N` (fix round 3, L-b; cosmetic).
 - Keyword positions are kept verbatim: method names, results, bare property names, method-version digits, property names under known ptypes (`header.<anything>`). A producer that puts personal words there passes them through.
@@ -346,3 +346,12 @@ AU-Q69 details (coordinator, after the test-writer's re-derivation): `PRODUCER_W
 1. **V8, dots-only local-part.** A non-empty unquoted local-part made only of dots becomes `userN` followed by those dots (`...@qx.test` gives `user1...@b.example`), in line with 14.7; the dots are kept so the parser's refusal stays where it was.
 2. **L-a, doc IPv6 kept only when well formed.** A doc-prefixed hex run (`2001:db8:` / `2001:0db8:`, any case) is kept only if it is a well-formed IPv6 address: no `.`, groups of 1 to 4 hex digits, at most one `::`, and 8 groups at most (fewer than 8 only with `::`). Anything else gets an IPv6 placeholder like a non-doc run (so `2001:db8:5551234567` and `2001:db8::2a00:1450:4001:815::200e` are replaced). Placeholders are well formed, so idempotence holds.
 3. **L-b, non-ASCII case.** Word keys stay ASCII-lowercased (no `str.lower()`, which the package avoids); a case difference in non-ASCII letters gives two `tok_N` placeholders. Recorded in section 11 as cosmetic (no data revealed).
+
+## 19. Follow-up: L-c (maintainer, 2026-11-08)
+
+No library (`ipaddress` stays out of the allowlist). A kept doc IPv6 is reserved by value, not by spelling:
+1. A helper expands a well-formed IPv6 hex run (as accepted by `_well_formed_ipv6`) to its 8 16-bit numbers: split at the one `::`, fill the gap with zero groups, read each group as hex (case-insensitive, 1 to 4 digits).
+2. Every kept doc IPv6 adds its 8-number tuple to a separate reserved set.
+3. Before giving out IPv6 placeholder N, the allocator expands it the same way and skips it if its tuple is reserved.
+Non-doc IPv6 keys stay as they are (keying them by value is a separate, cosmetic change, not done). Section 11's L-c entry is removed once this lands.
+Maintainer, later the same day: the stdlib `ipaddress` module may be used if the hand-written expansion turns out to need more than a small helper; in that case `_redact.py` gets a narrow `EXTRA_IMPORTS` exemption for `ipaddress` (like `sys` for `redact.py`), its input is bounded to a well-formed hex run of at most 39 characters with no `.` or `%`, and `AddressValueError` never escapes. The default is still the small helper.

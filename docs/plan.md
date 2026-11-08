@@ -40,7 +40,7 @@ AL3c in detail:
 
 AL3d in detail:
 - `python -m authresults.redact`, planned in `docs/plans/al3d.md` (rules R1 to R14, answers AU-Q59 to AU-Q69, clarifications and fix rounds in sections 13 to 18). 3,166 tests, 100% coverage; written test-first by a separate test-writer.
-- The red-team found leaks that were closed in three rounds (glued IPv6, digit runs after `/`, extra version runs, doc-prefixed IPv6, unknown keyword words under AU-Q69); its final pass got no undocumented personal data through. One low item is open and documented (`docs/plans/al3d.md` section 11, L-c: a non-canonical kept doc IPv6 can share a spelling-equivalent placeholder).
+- The red-team found leaks that were closed in three rounds (glued IPv6, digit runs after `/`, extra version runs, doc-prefixed IPv6, unknown keyword words under AU-Q69); its final pass got no undocumented personal data through. The last low item (L-c: a non-canonical kept doc IPv6 could share a spelling-equivalent placeholder) was fixed in a follow-up by reserving kept doc IPv6 by value (`docs/plans/al3d.md` section 19).
 
 Next: AL4 and the first release.
 

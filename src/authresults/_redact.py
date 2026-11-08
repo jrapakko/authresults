@@ -383,6 +383,7 @@ class _Scan:
     arc: bool
     started: bool  # the ARC prefix check ran
     no_ipv6_before: int  # hex runs before this offset are not IPv6
+    reserved_ipv6: set[tuple[int, ...]]  # kept doc IPv6, by value (section 19)
 
 
 # --- pass 0: regions (R2) ---------------------------------------------------
@@ -673,6 +674,17 @@ def _well_formed_ipv6(lower: str) -> bool:
     )
 
 
+def _ipv6_value(lower: str) -> tuple[int, ...]:
+    """Expand a run accepted by ``_well_formed_ipv6`` to its 8 numbers (sec. 19)."""
+    halves = [
+        [int(g, 16) for g in half.split(":")] if half else []
+        for half in lower.split("::")
+    ]
+    head = halves[0]
+    tail = halves[1] if len(halves) == _IPV6_HALVES else []
+    return (*head, *([0] * (_IPV6_GROUPS - len(head) - len(tail))), *tail)
+
+
 def _ipv6_piece(scan: _Scan, start: int, end: int) -> int:
     """R9 step 1: emit an IPv6 piece at *start* and return its end, or -1.
 
@@ -701,6 +713,7 @@ def _ipv6_piece(scan: _Scan, start: int, end: int) -> int:
     if lower.startswith(_DOC_IPV6) and _well_formed_ipv6(lower):  # 18.2
         scan.parts.append(text[start:stop])
         scan.taken.add(lower)
+        scan.reserved_ipv6.add(_ipv6_value(lower))  # section 19
     else:
         _slot(scan, _IPV6, lower, start, stop)
     tail = stop
@@ -1214,6 +1227,14 @@ def _walk(scan: _Scan) -> None:
 # --- pass 2 and the entry point ---------------------------------------------
 
 
+def _reserved(scan: _Scan, prefix: str, n: int) -> bool:
+    """Return True if placeholder *n* is in the input (spelling or IPv6 value)."""
+    name = _numbered(prefix, n)
+    if name in scan.taken:
+        return True
+    return prefix == "ipv6" and _ipv6_value(name) in scan.reserved_ipv6
+
+
 def _allocate(scan: _Scan) -> list[str] | None:
     """Allocate placeholders per prefix, skipping ``taken``; None if a pool is out."""
     last: dict[str, int] = {}
@@ -1221,7 +1242,7 @@ def _allocate(scan: _Scan) -> list[str] | None:
     for slot in scan.slots:
         cap = _CAPS.get(slot.prefix, MAX_NUMBER)
         n = last.get(slot.prefix, 0) + 1
-        while n <= cap and _numbered(slot.prefix, n) in scan.taken:
+        while n <= cap and _reserved(scan, slot.prefix, n):
             n += 1
         if n > cap:
             return None
@@ -1266,6 +1287,7 @@ def _redact_value(value: object) -> Redaction:
         arc=False,
         started=False,
         no_ipv6_before=0,
+        reserved_ipv6=set(),
     )
     _walk(scan)
     non_ascii, controls = _removed(text)

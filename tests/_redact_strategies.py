@@ -404,7 +404,18 @@ def _item() -> st.SearchStrategy[str]:
     )
     bare = st.builds("{}={}".format, st.sampled_from(("action", "qxbare")), _pvalue())
     comment = st.builds("(qx secret {})".format, _N)
-    return st.one_of(known, unknown, secret_name, bare, comment)
+    # Section 19: a non-canonical kept doc IPv6 next to a non-doc one.
+    small = st.integers(1, 4)
+    doc_pair = st.builds(
+        "policy.ip={} policy.ip=fd00::{:x}".format,
+        st.one_of(
+            st.builds("2001:0db8:0:0:0:0:0:{:x}".format, small),
+            st.builds("2001:DB8::{:X}".format, small),
+            st.builds("2001:db8:0::{:x}".format, small),
+        ),
+        st.integers(1, 0xFFFF),
+    )
+    return st.one_of(known, unknown, secret_name, bare, comment, doc_pair)
 
 
 _SEPARATOR: Final = Slot(" ", required=True)
@@ -469,7 +480,8 @@ def secret_values(draw: st.DrawFn) -> str:
     """A header value with secrets in every slot (P2), built inside a valid
     skeleton so most values parse (section 16 item 2); about one in five
     carries one refused shape."""
-    missing_id = draw(st.integers(0, 5)) == 0
+    # The simplest draws give a valid value with an authserv-id.
+    missing_id = draw(st.integers(0, 5)) == 5  # noqa: PLR2004
     head = "" if missing_id else draw(st.sampled_from(("", "", "i=1; ")))
     authserv_id = "" if missing_id else draw(_authserv_id())
     version = "" if missing_id else draw(st.sampled_from(("", "", " 1")))
@@ -477,7 +489,7 @@ def secret_values(draw: st.DrawFn) -> str:
     body = results[0]
     for result in results[1:]:
         body += ";" + draw(_gap()) + result
-    broken = draw(st.integers(0, 4)) == 0
+    broken = draw(st.integers(0, 4)) == 4  # noqa: PLR2004
     kind, text = draw(_break()) if broken else ("", "")
     if kind == "job" and not missing_id:
         authserv_id += text
@@ -617,6 +629,29 @@ def well_formed_ipv6(run: str) -> bool:
     if double:
         return len(groups) < _MAX_GROUPS
     return len(groups) == _MAX_GROUPS
+
+
+def ipv6_value(run: str) -> tuple[int, ...]:
+    """Section 19: the 8 16-bit numbers of a well-formed IPv6 run."""
+    head, double, tail = run.partition("::")
+    left = [int(g, 16) for g in head.split(":") if g]
+    right = [int(g, 16) for g in tail.split(":") if g] if double else []
+    middle = [0] * (_MAX_GROUPS - len(left) - len(right))
+    return (*left, *middle, *right)
+
+
+def doc_ipv6_runs(text: str) -> list[str]:
+    """Well-formed doc-prefixed IPv6 runs in *text*, as written."""
+    runs = []
+    for match in _HEXRUN.finditer(text):
+        run = match.group()
+        if match.start() > 0 and text[match.start() - 1].isalnum():
+            run = run.partition(":")[2]
+        if run.lower().startswith(("2001:db8:", "2001:0db8:")) and well_formed_ipv6(
+            run
+        ):
+            runs.append(run)
+    return runs
 
 
 def _ipv6_problems(text: str) -> list[str]:
