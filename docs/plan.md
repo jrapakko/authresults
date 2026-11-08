@@ -21,7 +21,7 @@ Conventions: **VERIFIED** means read from a source (the date is given where it m
 | AL3b: properties, differential, mutation | `26a385f`; plan `86bcf35` | done; verified and red-teamed in 3 fix rounds; pushed |
 | AL3c: vendor fixture sweep, refused-shapes log, `known_shape` | `1f4e1cc` (cases), `b80480a` (src) | done; verified and red-teamed in 3 fix rounds; pushed |
 | AL3d: redaction helper for shape reports | `57c491c` (tests), `57c16c2` (helper) | done; verified and red-teamed in 3 fix rounds; pushed |
-| AL4: release workflow, README, 0.1.0 | | in progress (release tests and workflow, README, issue template committed; next: maintainer setup, then `release 0.1.0`) |
+| AL4: release workflow, README, 0.1.0 | `d100d30`, `a57a86e`, `94d2ea9`; release `9a1f8d5`, tag `v0.1.0` | done; 0.1.0 published to PyPI 2026-11-08, attestations verified (record below) |
 
 AL2b in detail:
 - AU-Q41 (Unicode space and format characters refused) has its case amendment (`608e139`), made by a fresh test-writer per 6.4, and the matching parser change.
@@ -44,7 +44,17 @@ AL3d in detail:
 - `python -m authresults.redact`, planned in `docs/plans/al3d.md` (rules R1 to R14, answers AU-Q59 to AU-Q69, clarifications and fix rounds in sections 13 to 18). 3,166 tests, 100% coverage; written test-first by a separate test-writer.
 - The red-team found leaks that were closed in three rounds (glued IPv6, digit runs after `/`, extra version runs, doc-prefixed IPv6, unknown keyword words under AU-Q69); its final pass got no undocumented personal data through. The last low item (L-c: a non-canonical kept doc IPv6 could share a spelling-equivalent placeholder) was fixed in a follow-up by reserving kept doc IPv6 by value (`docs/plans/al3d.md` section 19).
 
-Next: AL4 and the first release.
+AL4 release record (AU-Q12, AU-Q75), 2026-11-08:
+- Rehearsal: TestPyPI 0.1.0 from a manual Publish run on `main` (the release commit), environment `testpypi`. Exactly one wheel and one sdist; provenance publisher GitHub / `jrapakko/authresults` / `publish.yml` / `testpypi`; installed from TestPyPI into a scratch venv: `authresults.__version__ == "0.1.0"`, a parse and `python -m authresults.redact` (and `--help`) worked. The first attempt failed with `invalid-publisher` until the TestPyPI pending publisher was created.
+- Release: tag `v0.1.0` (annotated, no signing key configured; AU-Q79 B) on commit `9a1f8d50399755d9f05823aa94545f7955032e95`. The first tag run was refused by the `pypi` environment (its deployment rule did not match the tag); after the rule was set to Tag `v*`, the failed job was re-run and published.
+- PyPI 0.1.0 files (identical to the TestPyPI rehearsal):
+  - `authresults-0.1.0-py3-none-any.whl` sha256 `7669910eac665dfb05e1a58afda82aa8f3ea76f6f3066bc5135fcb39138706ea`, transparency log index 3747819247;
+  - `authresults-0.1.0.tar.gz` sha256 `dbda4f5fea5e3981e3eef75df473ec9a941d0a76c6206901162aedc12367ab88`, transparency log index 3747819245.
+- Provenance (PyPI integrity API) for both files: publisher kind GitHub, repository `jrapakko/authresults`, workflow `publish.yml`, environment `pypi`.
+- Verification: `uv tool run --from 'pypi-attestations==0.0.30' pypi-attestations verify pypi --repository https://github.com/jrapakko/authresults pypi:<file>` printed `OK` for both files. The repository and workflow are in the signed certificate; the environment is as recorded by PyPI's publisher (not checked from the signature).
+- GitHub release `v0.1.0` exists with the same two files attached (AU-Q72).
+
+Next: none planned in this plan; the library is released. Post-launch items (debug logging, AU-Q46/AU-Q51 revisits) are in section 8.
 
 **Working method.** Each slice goes architect, then implementer, then verifier, then red-team, with a fix loop: red-team findings go back to the implementer as repros, and the verifier re-runs. The loop is capped at 3 rounds before it is escalated to the maintainer. Only the implementer edits source; the verifier and red-team are read-only. Tests come before the parser: the case table (AL3a) was written from the RFCs and this plan by a fresh instance before any parser code existed, and its expectations change only through answered questions (6.4). Every commit and every push happens only with the maintainer's OK.
 
