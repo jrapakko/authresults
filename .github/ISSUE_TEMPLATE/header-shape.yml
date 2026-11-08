@@ -1,0 +1,99 @@
+name: Report a header shape
+description: A real-world value that authresults refuses or reads differently.
+title: "[shape] "
+labels: ["header-shape"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste an original header value.** Write it to a file with an
+        editor and run `python -m authresults.redact < value.txt`, read the
+        output, and paste the stdout value below. Never post the output of
+        `--show-originals`.
+
+        A mis-parse that creates or hides a result, or a redaction miss that
+        leaks personal data, is a security report: use
+        [private reporting](https://github.com/jrapakko/authresults/security/advisories/new)
+        instead of this form.
+  - type: input
+    id: producer
+    attributes:
+      label: Producer
+      description: The vendor or software that wrote the field, and its version if known.
+    validations:
+      required: true
+  - type: dropdown
+    id: field
+    attributes:
+      label: Field
+      options:
+        - Authentication-Results
+        - ARC-Authentication-Results
+        - other (an X- field)
+    validations:
+      required: true
+  - type: input
+    id: call
+    attributes:
+      label: Call
+      description: The call and keywords you used.
+      placeholder: parse(value) or parse_arc(value, strict_syntax=True)
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: Redacted value
+      description: >-
+        The stdout of the redaction helper, with any remaining names rewritten
+        to RFC 2606/6761 names and addresses to RFC 5737/3849 addresses.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Redaction report
+      description: >-
+        The stderr lines "line breaks:", "parse (original):" and
+        "parse (redacted):". Not the --show-originals report.
+      render: text
+  - type: input
+    id: reason
+    attributes:
+      label: reason
+      description: err.reason, for example syntax.
+    validations:
+      required: true
+  - type: input
+    id: position
+    attributes:
+      label: position
+      description: err.position (a number, or None).
+  - type: input
+    id: known_shape
+    attributes:
+      label: known_shape
+      description: err.known_shape (the text None if unset).
+  - type: input
+    id: version
+    attributes:
+      label: authresults version
+      description: authresults.__version__
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: Domains and email addresses are replaced with RFC 2606/6761 names (vendor service hostnames that the redaction helper keeps may stay).
+          required: true
+        - label: IP addresses are replaced with RFC 5737/3849 addresses.
+          required: true
+        - label: Local-parts, display names, selectors, signatures, message and job IDs are removed.
+          required: true
+        - label: I read the output before posting.
+          required: true
+        - label: This is not a security issue.
+          required: true

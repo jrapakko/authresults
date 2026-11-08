@@ -87,6 +87,29 @@ unset UV_PROJECT_ENVIRONMENT
   Dependabot ignores it; bump both together by hand and regenerate the hashes
   with `echo flit-core==X.Y.Z | uv pip compile - --generate-hashes`.
 
+## Releasing (maintainer)
+
+`.github/workflows/publish.yml` builds once and publishes through Trusted
+Publishing (no API tokens). Every step needs the maintainer:
+
+1. Rehearse: "Run workflow" on `main` publishes to TestPyPI in the GitHub
+   environment `testpypi`; approve the deployment and check the upload.
+2. Release: push an annotated (signed if possible) tag `vX.Y.Z` on a commit
+   already on `main` with CI green; `X.Y.Z` must equal `__version__`. The
+   workflow publishes to PyPI in the environment `pypi` once the deployment is
+   approved, then creates the GitHub release from the CHANGELOG section.
+3. Verify the PyPI attestations by hand against `jrapakko/authresults`,
+   `publish.yml` and `pypi`, and record the result in `docs/plan.md` (AU-Q12).
+
+The protections are the GitHub settings and the pending publishers, all set up
+before the first run: a ruleset on `v*` tags (only the owner creates them; no
+updates or deletions), the `pypi` and `testpypi` environments with the
+maintainer as required reviewer and deployments limited to `v*` tags and to
+`main` respectively, and the PyPI and TestPyPI pending publishers bound to
+`publish.yml` and those environments. The workflow's own checks (tag equals
+`v` + a final `__version__`, tagged commit on `main`, one wheel and one sdist)
+are a backstop, not the protection.
+
 ## Sign-off (DCO)
 
 Please sign off every commit to certify the

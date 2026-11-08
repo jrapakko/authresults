@@ -76,7 +76,7 @@ version = "1.2.0"
 requires-dist = []
 
 [tool.mutmut]
-# PLAN.md 4: the tokeniser and the parser. Run by hand (CONTRIBUTING).
+# docs/plan.md section 4: the tokeniser and the parser. Run by hand (CONTRIBUTING).
 source_paths = ["src"]
 only_mutate = ["src/authresults/_tokenizer.py", "src/authresults/_parser.py"]
 # The behavioural tests only: test_invariants and test_case_table_meta read

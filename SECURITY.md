@@ -26,3 +26,6 @@ new version and credited in the changelog unless you ask otherwise.
 - Input text appearing in an error message.
 - Output from the serializer that could inject a header (CR, LF or other
   control characters).
+- A miss in `python -m authresults.redact` that lets personal data through.
+  Report it privately, never in a header shape issue, because the reproduction
+  contains the data.
