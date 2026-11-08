@@ -17,6 +17,7 @@ import importlib.metadata
 import os
 import re
 import tarfile
+import tomllib
 import zipfile
 from collections.abc import Callable, Iterator
 from email.message import Message
@@ -155,3 +156,57 @@ def test_build_constraint_matches_lock() -> None:
     match = re.search(r"^flit-core==(\S+)", text, re.MULTILINE)
     assert match is not None
     assert match.group(1) == importlib.metadata.version("flit-core")
+
+
+# AL4: the README is the PyPI page (docs/plans/al4.md section 6).
+
+
+def _long_description(data: bytes) -> tuple[str | None, str]:
+    """The content type and the body of a core metadata file.
+
+    Parsed from text, so a non-ASCII README compares as text.
+    """
+    meta = email.parser.Parser(policy=email.policy.compat32).parsestr(
+        data.decode("utf-8")
+    )
+    body = meta.get_payload()
+    assert isinstance(body, str)
+    return meta["Description-Content-Type"], body
+
+
+def _sdist_pkg_info(sdist: tarfile.TarFile) -> bytes:
+    member = sdist.extractfile(f"{NAME}-{VERSION}/PKG-INFO")
+    assert member is not None
+    return member.read()
+
+
+def test_long_description_is_the_readme(
+    wheel: zipfile.ZipFile, sdist: tarfile.TarFile
+) -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8").strip()
+    for data in (
+        wheel.read(f"{NAME}-{VERSION}.dist-info/METADATA"),
+        _sdist_pkg_info(sdist),
+    ):
+        content_type, body = _long_description(data)
+        assert content_type == "text/markdown"
+        assert body.strip() == readme
+
+
+def test_project_urls(wheel: zipfile.ZipFile, sdist: tarfile.TarFile) -> None:
+    with (ROOT / "pyproject.toml").open("rb") as f:
+        urls = tomllib.load(f)["project"]["urls"]
+    expected = {f"{label}, {url}" for label, url in urls.items()}
+    assert len(expected) == 3  # noqa: PLR2004 - Source, Issues, Changelog
+    for meta in (_wheel_meta(wheel, "METADATA"), _parse(_sdist_pkg_info(sdist))):
+        assert expected <= set(meta.get_all("Project-URL") or [])
+
+
+@pytest.mark.skipif(
+    ".dev" in VERSION,
+    reason="release-only: a dev version keeps its classifier (al4 section 13.4)",
+)
+def test_release_classifier(wheel: zipfile.ZipFile, sdist: tarfile.TarFile) -> None:
+    # AU-Q74: 0.1.0 is an alpha. Active from the release commit on.
+    for meta in (_wheel_meta(wheel, "METADATA"), _parse(_sdist_pkg_info(sdist))):
+        assert "Development Status :: 3 - Alpha" in (meta.get_all("Classifier") or [])
