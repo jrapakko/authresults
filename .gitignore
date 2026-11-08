@@ -219,5 +219,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# mutmut (PLAN.md 6.3)
+# mutmut (docs/plan.md section 6.3)
 mutants/

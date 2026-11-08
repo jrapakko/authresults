@@ -54,6 +54,26 @@ comments as data, `Received` parsing, logging and warnings. The library never lo
 - U-labels are not converted; use the `idna` package. `ascii_domain()` returns `None` for
   any non-ASCII name.
 
+## How it compares to authres
+
+[authres](https://pypi.org/project/authres/) is the existing Python parser for these
+headers; `authresults` was checked against its 1.2.0 release, and the results match on
+values both accept. Where authres differs, it:
+
+- drops properties silently: a bare `action=none`, a ptype outside smtp, header, body and
+  policy, a quoted value not followed by `;`; and cuts comments short before `reason`;
+- matches `none` and `reason` as prefixes, so `nonexistent=pass` is refused;
+- refuses valid values: a quoted authserv-id, `reason=""`, a leading-zero version, and
+  `: [ ] < >` in a value;
+- takes the first method as the authserv-id when there is none, and raises `RecursionError`
+  on deeply nested comments.
+
+Each has its own test in
+[tests/test_differential.py](https://github.com/jrapakko/authresults/blob/main/tests/test_differential.py).
+`authresults` adds the linear, no-recursion guarantees, a closed error set with no input in
+messages, deviations with a strict mode, `known_shape`, registry flags, ARC, `to_value()`
+and the redaction helper.
+
 ## Using it on received mail
 
 Senders can add any `Authentication-Results` field they like, so trust only one your own
@@ -325,16 +345,16 @@ syntax at position 14
 |---|---|
 | `invalid_type` | the value is not a `str` |
 | `empty` | the value is empty or only whitespace |
-| `too_long` | longer than `max_length` (checked first) |
+| `too_long` | longer than `max_length` (default 8192, checked first) |
 | `non_ascii` | non-ASCII under `ascii_only=True` |
 | `control_char` | a control, Unicode space or format character, or a lone surrogate |
 | `unterminated_comment` | a comment is not closed |
 | `unterminated_quoted_string` | a quoted string is not closed |
-| `nesting_too_deep` | comments nested deeper than `max_comment_depth` |
+| `nesting_too_deep` | comments nested deeper than `max_comment_depth` (default 16) |
 | `syntax` | the value does not follow the grammar |
 | `unsupported_version` | a header version other than 1 |
-| `too_many_results` | more than `max_results` results |
-| `too_many_properties` | more than `max_properties` properties in one result |
+| `too_many_results` | more than `max_results` (default 64) results |
+| `too_many_properties` | more than `max_properties` (default 64) properties in one result |
 | `duplicate_reason` | two `reason=` in one result |
 | `duplicate_property` | `get_unique()` found two matching properties |
 | `deviation` | a deviation under `strict_syntax=True` |

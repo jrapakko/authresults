@@ -110,6 +110,18 @@ maintainer as required reviewer and deployments limited to `v*` tags and to
 `v` + a final `__version__`, tagged commit on `main`, one wheel and one sdist)
 are a backstop, not the protection.
 
+Lessons from 0.1.0:
+
+- TestPyPI is a separate site: it needs its own account (with 2FA) and its own
+  pending publisher (environment `testpypi`), or the upload fails with
+  `invalid-publisher`.
+- The `pypi` environment's deployment rule must be of type **Tag** with pattern
+  `v*`; a branch rule refuses the tag run ("not allowed to deploy ... due to
+  environment protection rules").
+- A job that fails before the upload can be re-run with "Re-run failed jobs";
+  nothing is consumed. A version already uploaded to TestPyPI or PyPI can never
+  be uploaded again, so a fix needs a new version.
+
 ## Sign-off (DCO)
 
 Please sign off every commit to certify the
