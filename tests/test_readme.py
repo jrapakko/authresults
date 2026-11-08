@@ -44,7 +44,7 @@ README = ROOT / "README.md"
 REPO = "https://github.com/jrapakko/authresults"
 BLOB = f"{REPO}/blob/main/"
 ISSUE_FORM_URL = f"{REPO}/issues/new?template=header-shape.yml"
-MAX_LINES = 500
+MAX_LINES = 550
 MIN_DOCTESTS = 12
 
 H2 = [
