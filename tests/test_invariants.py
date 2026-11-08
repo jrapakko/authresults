@@ -47,7 +47,10 @@ depend on the input. Calls through local variables bound to a module object,
 or through objects passed in from outside, are not tracked.
 
 Imports. No ``re``. Only an allowlist of stdlib modules, plus relative imports
-within the package.
+within the package. One exemption (AL3d): the CLI module ``redact.py`` may also
+import ``sys``, and may use it only inside its module-level
+``if __name__ == "__main__":`` block, and only as ``sys.argv``, ``sys.stdin``,
+``sys.stdout`` and ``sys.stderr``.
 
 Ruff has no recursion rule (``ruff rule --all`` checked at AL2a), hence this
 test.
@@ -64,6 +67,9 @@ PACKAGE = Path(__file__).resolve().parent.parent / "src" / "authresults"
 ALLOWED_IMPORTS = frozenset(
     {"enum", "dataclasses", "typing", "collections.abc", "contextlib", "functools"}
 )
+# Per-module additions to ALLOWED_IMPORTS (AL3d plan, section 2).
+EXTRA_IMPORTS = {"redact.py": frozenset({"sys"})}
+SYS_ATTRIBUTES = frozenset({"argv", "stdin", "stdout", "stderr"})
 BANNED_NAMES = frozenset(
     {
         "__import__",
@@ -393,11 +399,68 @@ def _is_re(module: str) -> bool:
     return module == "re" or module.startswith("re.")
 
 
+def imports_allowed(module: str, source: str) -> bool:
+    """Return True if *source*, as file *module*, imports only what it may."""
+    imports = imported_modules(source)
+    allowed = ALLOWED_IMPORTS | EXTRA_IMPORTS.get(module, frozenset())
+    return not any(_is_re(m) for m in imports) and imports <= allowed
+
+
+def _is_main_guard(node: ast.stmt) -> bool:
+    return (
+        isinstance(node, ast.If)
+        and isinstance(node.test, ast.Compare)
+        and isinstance(node.test.left, ast.Name)
+        and node.test.left.id == "__name__"
+        and len(node.test.ops) == 1
+        and isinstance(node.test.ops[0], ast.Eq)
+        and len(node.test.comparators) == 1
+        and isinstance(node.test.comparators[0], ast.Constant)
+        and node.test.comparators[0].value == "__main__"
+    )
+
+
+def sys_problems(source: str) -> list[str]:
+    """Uses of ``sys`` outside the main guard, or of other ``sys`` attributes.
+
+    Only ``import sys`` (no alias, no ``from sys import``) is allowed at the
+    top; every name ``sys`` must lie inside a module-level
+    ``if __name__ == "__main__":`` block and be ``sys.<one of SYS_ATTRIBUTES>``.
+    """
+    tree = ast.parse(source)
+    guarded: set[int] = set()
+    for statement in tree.body:
+        if _is_main_guard(statement):
+            guarded.update(id(n) for n in ast.walk(statement))
+    found: list[str] = []
+    for node in ast.walk(tree):
+        line = getattr(node, "lineno", 0)
+        if isinstance(node, ast.Import):
+            found.extend(
+                f"{line}: import sys as {a.asname}"
+                for a in node.names
+                if a.name == "sys" and a.asname
+            )
+        elif isinstance(node, ast.ImportFrom) and node.module == "sys":
+            found.append(f"{line}: from sys import")
+        elif (
+            isinstance(node, ast.Attribute)
+            and (isinstance(node.value, ast.Name) and node.value.id == "sys")
+            and node.attr not in SYS_ATTRIBUTES
+        ):
+            found.append(f"{line}: sys.{node.attr}")
+        if isinstance(node, ast.Name) and node.id == "sys" and id(node) not in guarded:
+            found.append(f"{line}: sys outside the main guard")
+    return found
+
+
 # --- the package ------------------------------------------------------------
 
 
 def test_package_has_modules() -> None:
     assert "__init__.py" in _package_sources()
+    # A rename must not drop the redaction modules from these checks (AL3d).
+    assert {"_redact.py", "redact.py"} <= set(_package_sources())
 
 
 def test_package_has_no_recursion() -> None:
@@ -411,9 +474,13 @@ def test_module_has_no_banned_constructs(module: str) -> None:
 
 @pytest.mark.parametrize("module", sorted(_package_sources()))
 def test_module_imports(module: str) -> None:
-    imports = imported_modules(_package_sources()[module])
-    assert not any(_is_re(m) for m in imports)
-    assert imports <= ALLOWED_IMPORTS
+    assert imports_allowed(module, _package_sources()[module])
+
+
+def test_cli_uses_sys_only_in_the_main_guard() -> None:
+    source = _package_sources()["redact.py"]
+    assert "sys" in imported_modules(source)
+    assert sys_problems(source) == []
 
 
 # --- self-tests on planted sources ------------------------------------------
@@ -769,3 +836,59 @@ def test_import_detector(source: str, *, is_re: bool, allowed: bool) -> None:
     imports = imported_modules(source)
     assert any(_is_re(m) for m in imports) is is_re
     assert (imports <= ALLOWED_IMPORTS) is allowed
+
+
+_CLI_OK = (
+    "import sys\n"
+    "def main(argv, stdin, stdout, stderr):\n"
+    "    return 0\n"
+    'if __name__ == "__main__":\n'
+    "    raise SystemExit(main(sys.argv[1:], sys.stdin.buffer, sys.stdout.buffer,"
+    " sys.stderr.buffer))\n"
+)
+
+SYS_CASES: dict[str, tuple[str, list[str]]] = {
+    "allowed": (_CLI_OK, []),
+    "sys.modules in the guard": (
+        'import sys\nif __name__ == "__main__":\n    sys.modules.clear()\n',
+        ["3: sys.modules"],
+    ),
+    "sys outside the guard": (
+        "import sys\ndef main():\n    return sys.argv\n",
+        ["3: sys outside the main guard"],
+    ),
+    "sys at module level": (
+        "import sys\nARGS = sys.argv\n",
+        ["2: sys outside the main guard"],
+    ),
+    "guard not at module level": (
+        'import sys\ndef f():\n    if __name__ == "__main__":\n        sys.exit()\n',
+        ["4: sys.exit", "4: sys outside the main guard"],
+    ),
+    "aliased": ("import sys as s\n", ["1: import sys as s"]),
+    "from import": ("from sys import argv\n", ["1: from sys import"]),
+}
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"), SYS_CASES.values(), ids=SYS_CASES.keys()
+)
+def test_sys_detector(source: str, expected: list[str]) -> None:
+    assert sorted(sys_problems(source)) == sorted(expected)
+
+
+@pytest.mark.parametrize(
+    ("module", "source", "allowed"),
+    [
+        ("redact.py", "import sys", True),
+        ("_redact.py", "import sys", False),
+        ("_parser.py", "import sys", False),
+        ("redact.py", "import os", False),
+        ("redact.py", "import re", False),
+        ("redact.py", "import contextlib\nfrom collections.abc import Sequence", True),
+    ],
+)
+def test_extra_imports_are_per_module(
+    module: str, source: str, *, allowed: bool
+) -> None:
+    assert imports_allowed(module, source) is allowed

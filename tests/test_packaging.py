@@ -129,6 +129,21 @@ def test_sdist_contents_allowlist(sdist: tarfile.TarFile) -> None:
     assert rel >= SDIST_TOP_LEVEL | {f"src/{NAME}/__init__.py", f"src/{NAME}/py.typed"}
 
 
+REDACT_MODULES = ("redact.py", "_redact.py")  # AL3d: python -m authresults.redact
+
+
+def test_wheel_has_the_redaction_helper(wheel: zipfile.ZipFile) -> None:
+    names = set(wheel.namelist())
+    assert {f"{NAME}/{m}" for m in REDACT_MODULES} <= names
+    # The only entry point is ``python -m``: no console script.
+    assert not any(n.endswith("entry_points.txt") for n in names)
+
+
+def test_sdist_has_the_redaction_helper(sdist: tarfile.TarFile) -> None:
+    names = set(sdist.getnames())
+    assert {f"{NAME}-{VERSION}/src/{NAME}/{m}" for m in REDACT_MODULES} <= names
+
+
 def test_sdist_metadata(sdist: tarfile.TarFile) -> None:
     member = sdist.extractfile(f"{NAME}-{VERSION}/PKG-INFO")
     assert member is not None
