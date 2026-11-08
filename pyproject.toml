@@ -14,7 +14,7 @@ requires-python = ">=3.11"
 dependencies = []
 keywords = ["email", "authentication-results", "rfc8601", "dkim", "spf", "dmarc", "arc"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",

@@ -8,7 +8,7 @@ from ._errors import AuthResultsError, Deviation, ErrorReason, KnownShape
 from ._helpers import ascii_domain, domain_of
 from ._model import ArcAuthenticationResults, AuthenticationResults, Property, Result
 
-__version__ = "0.1.0.dev0"
+__version__ = "0.1.0"
 
 __all__ = [
     "ArcAuthenticationResults",

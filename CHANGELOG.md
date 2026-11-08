@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-08
+
 First release.
 
 ### Added
@@ -33,3 +35,6 @@ First release.
 - `python -m authresults.redact`: a best-effort helper that replaces personal
   data in one header value before it is posted in a bug report.
 - `py.typed`: the package is fully typed.
+
+[Unreleased]: https://github.com/jrapakko/authresults/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jrapakko/authresults/releases/tag/v0.1.0
